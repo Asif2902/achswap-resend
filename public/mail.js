@@ -20,6 +20,15 @@ const el = (tag, className, text) => {
   if (text !== undefined) node.textContent = text;
   return node;
 };
+function icon(name) {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("class", "icon");
+  svg.setAttribute("aria-hidden", "true");
+  const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+  use.setAttribute("href", `/img/mail-icons.svg#${name}`);
+  svg.append(use);
+  return svg;
+}
 const token = () => sessionStorage.getItem("achswap_token") || "";
 // Migrate the existing login once; keep subsequent sessions scoped to this tab.
 if (!token() && localStorage.getItem("achswap_token")) {
@@ -117,6 +126,7 @@ async function enter(user) {
   state.user = user;
   $("#login").hidden = true;
   $("#workspace").hidden = false;
+  readerEmpty();
   $("#user-email").textContent = user.email;
   $("#user-name").textContent = user.email.split("@")[0];
   $("#avatar").textContent = initials(user.email);
@@ -156,7 +166,8 @@ $("#login-form").addEventListener("submit", async (event) => {
   }
 });
 $("#logout").addEventListener("click", logout);
-const mobileSignout = el("button", "icon-button mobile-signout", "↪");
+const mobileSignout = el("button", "icon-button mobile-signout");
+mobileSignout.append(icon("logout"));
 mobileSignout.setAttribute("aria-label", "Sign out");
 mobileSignout.addEventListener("click", logout);
 $(".toolbar-actions").append(mobileSignout);
@@ -178,7 +189,11 @@ function renderList() {
   const root = $("#conversation-list");
   root.replaceChildren();
   $("#result-count").textContent =
-    `${state.items.length}${state.cursor ? "+" : ""} conversations`;
+    `${state.items.length}${state.cursor ? "+" : ""}`;
+  $("#result-count").setAttribute(
+    "aria-label",
+    `${state.items.length}${state.cursor ? " or more" : ""} conversations`,
+  );
   if (!state.items.length) {
     root.append(
       el(
@@ -197,6 +212,8 @@ function renderList() {
       `conversation${item.id === state.thread?.id ? " selected" : ""}${item.unread_count ? " unread" : ""}`,
     );
     button.type = "button";
+    button.dataset.id = item.id;
+    button.setAttribute("aria-pressed", String(item.id === state.thread?.id));
     button.setAttribute(
       "aria-label",
       `${item.subject || "(No subject)"} — ${inboxName(item.inbox_type)}`,
@@ -270,14 +287,12 @@ function readerEmpty() {
   state.threadVersion++;
   $(".mail-layout").classList.remove("reading");
   const empty = el("div", "reader-empty");
+  const symbol = el("span", "empty-symbol");
+  symbol.append(icon("mail"));
   empty.append(
-    el("span", "empty-symbol", "↗"),
-    el("h2", "", "Room to focus."),
-    el(
-      "p",
-      "",
-      "Choose a conversation to read and reply.\nEverything stays in its own inbox.",
-    ),
+    symbol,
+    el("h2", "", "Select a conversation"),
+    el("p", "", "Read and reply to your team’s mail here."),
   );
   $("#reader").replaceChildren(empty);
 }
@@ -292,18 +307,21 @@ for (const button of document.querySelectorAll("[data-inbox]"))
     state.replyDraft = null;
     state.inbox = button.dataset.inbox;
     $("#inbox-title").textContent = inboxName(state.inbox);
-    document
-      .querySelectorAll("[data-inbox]")
-      .forEach((b) => b.classList.toggle("active", b === button));
+    document.querySelectorAll("[data-inbox]").forEach((b) => {
+      b.classList.toggle("active", b === button);
+      if (b === button) b.setAttribute("aria-current", "page");
+      else b.removeAttribute("aria-current");
+    });
     readerEmpty();
     refreshList();
   });
 for (const button of document.querySelectorAll("[data-view]"))
   button.addEventListener("click", () => {
     state.view = button.dataset.view;
-    document
-      .querySelectorAll("[data-view]")
-      .forEach((b) => b.classList.toggle("active", b === button));
+    document.querySelectorAll("[data-view]").forEach((b) => {
+      b.classList.toggle("active", b === button);
+      b.setAttribute("aria-pressed", String(b === button));
+    });
     refreshList();
   });
 $("#search-form").addEventListener("submit", (event) => {
@@ -320,6 +338,7 @@ async function openThread(id, older = false) {
   if (state.thread?.id !== id && state.replyDraft?.message && !leaveDraft())
     return;
   if (state.thread?.id !== id) state.replyDraft = null;
+  const newSelection = state.thread?.id !== id;
   const version = ++state.threadVersion;
   try {
     const data = await api(
@@ -334,6 +353,10 @@ async function openThread(id, older = false) {
     renderThread();
     renderList();
     $(".mail-layout").classList.add("reading");
+    if (newSelection) {
+      $("#reader").scrollTop = 0;
+      $("#reader").focus({ preventScroll: true });
+    }
     await api("read", {
       messageIds: data.messages
         .filter((m) => m.direction === "inbound")
@@ -349,9 +372,12 @@ function renderThread() {
   reader.replaceChildren();
   const header = el("header", "reader-head");
   const back = el("button", "back-button", "← Back to conversations");
-  back.addEventListener("click", () =>
-    $(".mail-layout").classList.remove("reading"),
-  );
+  back.addEventListener("click", () => {
+    $(".mail-layout").classList.remove("reading");
+    [...document.querySelectorAll(".conversation")]
+      .find((button) => button.dataset.id === state.thread.id)
+      ?.focus({ preventScroll: true });
+  });
   header.append(
     back,
     el(
@@ -385,7 +411,13 @@ function renderThread() {
       el(
         "div",
         "message-addresses",
-        `${message.from_email || ""}\nTo: ${addressText(message.to)}${message.cc.length ? ` · CC: ${addressText(message.cc)}` : ""}`,
+        [
+          message.from_email || "",
+          addressText(message.to) ? `To: ${addressText(message.to)}` : "",
+          addressText(message.cc) ? `CC: ${addressText(message.cc)}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n"),
       ),
     );
     meta.append(
@@ -414,19 +446,20 @@ function renderThread() {
     for (const file of message.attachments) {
       const a = el("div", "attachment");
       a.append(
-        el("span", "", "⌁"),
+        icon("attachment"),
         el("span", "", file.filename || "Unnamed attachment"),
         el(
           "small",
           "",
-          `${Math.ceil(file.size_bytes / 1024)} KB · ${file.storage_status === "stored" ? "Stored in R2" : "File not retained"}`,
+          `${Math.ceil(file.size_bytes / 1024)} KB · ${file.storage_status === "stored" ? "File retained" : "File not retained"}`,
         ),
       );
       card.append(a);
     }
     const actions = el("div", "message-actions");
     if (message.delivery_status !== "pending") {
-      const reply = el("button", "text-button", "↶ Reply");
+      const reply = el("button", "text-button");
+      reply.append(icon("reply"), document.createTextNode("Reply"));
       reply.addEventListener("click", () => {
         if (!leaveDraft()) return;
         state.replyDraft = {
@@ -481,7 +514,7 @@ function renderReply() {
     const trigger = el("button", "reply-trigger");
     trigger.type = "button";
     trigger.append(
-      el("span", "reply-trigger-icon", "↩"),
+      icon("reply"),
       el("span", "", "Reply"),
       el("small", "", `from ${state.thread.inbox_address}`),
     );

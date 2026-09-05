@@ -2,7 +2,11 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#0D1117" />
     <title>AchSwap Mail</title>
     <link
       rel="icon"
@@ -10,6 +14,13 @@
       href="/img/achswap-app-icon-rounded-192.png"
     />
     <link rel="apple-touch-icon" href="/img/achswap-app-icon-rounded-192.png" />
+    <link
+      rel="preload"
+      href="/fonts/inter-latin-wght-normal.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
     <link rel="stylesheet" href="/mail.css" />
     <script src="/mail.js" defer></script>
   </head>
@@ -21,14 +32,13 @@
             class="brand-icon"
             src="/img/achswap-app-icon-rounded-192.png"
             alt=""
-            width="30"
-            height="30"
-          />AchSwap
-          <span class="muted">/ Mail</span>
+            width="36"
+            height="36"
+          />
+          <span>AchSwap</span><span class="brand-label">Mail</span>
         </div>
-        <div class="eyebrow">YOUR TEAM, IN SYNC</div>
-        <h1>A little less noise.<br />A better inbox.</h1>
-        <p class="muted">Sign in to your personal and shared team mail.</p>
+        <h1>Welcome back.</h1>
+        <p class="muted">Sign in to your personal and shared inboxes.</p>
         <form id="login-form">
           <label
             >Email address<input
@@ -36,18 +46,24 @@
               type="email"
               required
               autocomplete="username"
-              placeholder="you@achswap.app" /></label
-          ><label
+              placeholder="you@achswap.app"
+          /></label>
+          <label
             >Password<input
               name="password"
               type="password"
               required
               autocomplete="current-password"
-              placeholder="Your team password" /></label
-          ><button class="primary" type="submit">Sign in <span>→</span></button>
+              placeholder="Your team password"
+          /></label>
+          <button class="primary" type="submit">
+            Sign in
+            <svg class="icon" aria-hidden="true">
+              <use href="/img/mail-icons.svg#arrow-right" />
+            </svg>
+          </button>
           <p id="login-error" class="error" role="alert"></p>
         </form>
-        <div class="login-note">One workspace. The right conversations.</div>
       </section>
     </main>
     <main id="workspace" class="workspace" hidden>
@@ -57,49 +73,46 @@
             class="brand-icon"
             src="/img/achswap-app-icon-rounded-192.png"
             alt=""
-            width="30"
-            height="30"
-          />AchSwap
-          <span class="muted">Mail</span>
+            width="36"
+            height="36"
+          />
+          <span>AchSwap</span><span class="brand-label">Mail</span>
         </div>
         <button
           id="compose"
           aria-label="New message"
           class="primary compose-button"
         >
-          <span>＋</span> New message
+          <svg class="icon" aria-hidden="true">
+            <use href="/img/mail-icons.svg#compose" /></svg
+          ><span>New message</span>
         </button>
         <nav aria-label="Mailboxes">
-          <button class="nav-item active" data-inbox="all">
-            <span class="nav-icon">▤</span>All mail<span
-              class="count"
-              data-count="all"
-            ></span>
+          <button class="nav-item active" data-inbox="all" aria-current="page">
+            <svg class="icon" aria-hidden="true">
+              <use href="/img/mail-icons.svg#inbox" /></svg
+            ><span>All mail</span><span class="count" data-count="all"></span>
           </button>
           <button class="nav-item" data-inbox="personal">
-            <span class="nav-icon">◎</span>Personal<span
-              class="count"
-              data-count="personal"
-            ></span>
+            <svg class="icon" aria-hidden="true">
+              <use href="/img/mail-icons.svg#user" /></svg
+            ><span>Personal</span
+            ><span class="count" data-count="personal"></span>
           </button>
-          <div class="nav-label shared-label">Shared</div>
+          <div class="nav-label shared-label">Shared inboxes</div>
           <button class="nav-item" data-inbox="support">
-            <span class="nav-icon">◇</span>Support<span
-              class="count"
-              data-count="support"
-            ></span>
+            <svg class="icon" aria-hidden="true">
+              <use href="/img/mail-icons.svg#support" /></svg
+            ><span>Support</span
+            ><span class="count" data-count="support"></span>
           </button>
           <button class="nav-item" data-inbox="admin">
-            <span class="nav-icon">▦</span>Admin<span
-              class="count"
-              data-count="admin"
-            ></span>
+            <svg class="icon" aria-hidden="true">
+              <use href="/img/mail-icons.svg#shield" /></svg
+            ><span>Admin</span><span class="count" data-count="admin"></span>
           </button>
         </nav>
         <div class="sidebar-bottom">
-          <div class="workspace-note">
-            <span class="green-dot"></span>A place for every conversation
-          </div>
           <div class="profile">
             <span id="avatar" class="avatar"></span>
             <div>
@@ -111,23 +124,27 @@
               title="Sign out"
               aria-label="Sign out"
             >
-              ↪
+              <svg class="icon" aria-hidden="true">
+                <use href="/img/mail-icons.svg#logout" />
+              </svg>
             </button>
           </div>
         </div>
       </aside>
       <section class="mail-pane">
         <header class="mail-toolbar">
-          <div>
-            <h1 id="inbox-title">All mail</h1>
-          </div>
+          <h1 id="inbox-title">All mail</h1>
           <div class="toolbar-actions">
             <form id="search-form" role="search">
-              <span>⌕</span
-              ><input
+              <svg class="icon" aria-hidden="true">
+                <use href="/img/mail-icons.svg#search" />
+              </svg>
+              <input
                 id="search"
+                type="search"
                 aria-label="Search mail"
-                placeholder="Search conversations…"
+                placeholder="Search mail"
+                enterkeyhint="search"
               />
             </form>
             <button
@@ -136,17 +153,21 @@
               title="Refresh mail"
               aria-label="Refresh mail"
             >
-              ↻
+              <svg class="icon" aria-hidden="true">
+                <use href="/img/mail-icons.svg#refresh" />
+              </svg>
             </button>
           </div>
         </header>
         <div class="mail-layout">
           <section class="list-pane" aria-label="Conversations">
             <div class="list-top">
-              <div class="tabs" aria-label="Message filter">
-                <button class="active" data-view="all">All</button
-                ><button data-view="unread">Unread</button
-                ><button data-view="sent">Sent</button>
+              <div class="tabs" role="group" aria-label="Message filter">
+                <button class="active" data-view="all" aria-pressed="true">
+                  All
+                </button>
+                <button data-view="unread" aria-pressed="false">Unread</button>
+                <button data-view="sent" aria-pressed="false">Sent</button>
               </div>
               <span id="result-count" class="muted"></span>
             </div>
@@ -160,56 +181,65 @@
               Load more conversations
             </button>
           </section>
-          <section id="reader" class="reader" aria-label="Conversation">
+          <section
+            id="reader"
+            class="reader"
+            aria-label="Conversation"
+            tabindex="-1"
+          >
             <div class="reader-empty">
-              <span class="empty-symbol">↗</span>
-              <h2>Room to focus.</h2>
-              <p>
-                Choose a conversation to read and reply.<br />Everything stays
-                in its own inbox.
-              </p>
+              <span class="empty-symbol"
+                ><svg class="icon" aria-hidden="true">
+                  <use href="/img/mail-icons.svg#mail" /></svg
+              ></span>
+              <h2>Select a conversation</h2>
+              <p>Read and reply to your team’s mail here.</p>
             </div>
           </section>
         </div>
       </section>
     </main>
-    <dialog id="composer">
+    <dialog id="composer" aria-labelledby="compose-title">
       <form id="compose-form">
         <header class="dialog-head">
-          <div>
-            <div class="eyebrow">A NEW CONVERSATION</div>
-            <h2>New message</h2>
-          </div>
+          <h2 id="compose-title">New message</h2>
           <button
             type="button"
             id="close-compose"
             class="icon-button"
             aria-label="Close new message"
           >
-            ×
+            <svg class="icon" aria-hidden="true">
+              <use href="/img/mail-icons.svg#close" />
+            </svg>
           </button>
         </header>
-        <label>From<select id="compose-from" required></select></label
-        ><label
-          >To<input
-            id="compose-to"
-            required
-            placeholder="name@example.com"
-            autocomplete="off" /></label
-        ><label
-          >CC <span class="muted">optional</span
-          ><input
-            id="compose-cc"
-            placeholder="Separate addresses with commas"
-            autocomplete="off" /></label
-        ><label
-          >Subject<input
-            id="compose-subject"
-            required
-            maxlength="998"
-            placeholder="What’s on your mind?" /></label
-        ><label class="sr-only" for="compose-body">Message</label
-        ><textarea
+        <div class="compose-fields">
+          <label>From<select id="compose-from" required></select></label>
+          <label
+            >To<input
+              id="compose-to"
+              required
+              placeholder="name@example.com"
+              autocomplete="off"
+          /></label>
+          <label
+            ><span>CC <span class="muted">(optional)</span></span
+            ><input
+              id="compose-cc"
+              placeholder="Separate addresses with commas"
+              autocomplete="off"
+          /></label>
+          <label
+            >Subject<input
+              id="compose-subject"
+              required
+              maxlength="998"
+              placeholder="Add a subject"
+          /></label>
+        </div>
+        <label class="sr-only" for="compose-body">Message</label>
+        <textarea
           id="compose-body"
           required
           maxlength="100000"
@@ -217,8 +247,12 @@
         ></textarea>
         <p id="compose-error" class="error" role="alert"></p>
         <footer>
-          <span class="muted">Saved in your conversation when sent.</span
-          ><button class="primary" type="submit">Send message ↗</button>
+          <button class="primary" type="submit">
+            Send message
+            <svg class="icon" aria-hidden="true">
+              <use href="/img/mail-icons.svg#send" />
+            </svg>
+          </button>
         </footer>
       </form>
     </dialog>

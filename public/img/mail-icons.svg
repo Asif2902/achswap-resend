@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <symbol id="inbox" viewBox="0 0 24 24"><path d="m4 4-2 9v7h20v-7l-2-9Z M2 13h6l2 3h4l2-3h6"/></symbol>
+    <symbol id="user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/></symbol>
+    <symbol id="support" viewBox="0 0 24 24"><path d="M4 14v-3a8 8 0 0 1 16 0v6a4 4 0 0 1-4 4h-4 M4 11H2v7h4v-7Zm16 0h2v7h-4v-7Z"/></symbol>
+    <symbol id="shield" viewBox="0 0 24 24"><path d="m12 2 8 3v7c0 5-8 10-8 10S4 17 4 12V5Z m-4 9 3 3 5-5"/></symbol>
+    <symbol id="search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="7.5"/><path d="m16 16 5 5"/></symbol>
+    <symbol id="refresh" viewBox="0 0 24 24"><path d="M20 8a9 9 0 1 0 1 7 M20 2v6h-6"/></symbol>
+    <symbol id="compose" viewBox="0 0 24 24"><path d="M12 4H4v16h16v-8 M10 14l1-5 8-8 4 4-8 8Z m7-11 4 4"/></symbol>
+    <symbol id="mail" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m2 6 10 7L22 6"/></symbol>
+    <symbol id="logout" viewBox="0 0 24 24"><path d="M9 3H3v18h6 M9 12h12 m-4-4 4 4-4 4"/></symbol>
+    <symbol id="close" viewBox="0 0 24 24"><path d="m6 6 12 12 M6 18 18 6"/></symbol>
+    <symbol id="arrow-right" viewBox="0 0 24 24"><path d="M4 12h16 m-6-6 6 6-6 6"/></symbol>
+    <symbol id="reply" viewBox="0 0 24 24"><path d="m8 4-6 6 6 6 M2 10h11a8 8 0 0 1 8 8v2"/></symbol>
+    <symbol id="send" viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4Z M11 13 22 2"/></symbol>
+    <symbol id="attachment" viewBox="0 0 24 24"><path d="m9 13 7-7a3 3 0 0 1 4 4L10 20a5 5 0 0 1-7-7L14 2 m-5 11a1.5 1.5 0 0 0 2 2l6-6"/></symbol>
+  </defs>
+</svg>

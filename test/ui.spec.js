@@ -113,6 +113,71 @@ test("mobile mailbox, reader and composer fit the viewport", async ({
   });
   await page.getByRole("button", { name: "Back to conversations" }).click();
   await expect(page.locator(".list-pane")).toBeVisible();
+  await page.getByRole("button", { name: "New message", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "New message" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Send message" }),
+  ).toBeInViewport();
+  await page.locator("#compose-body").fill("An unsent mobile draft.");
+  page.once("dialog", (dialog) => dialog.dismiss());
+  await page.getByRole("button", { name: "Close new message" }).click();
+  await expect(page.locator("#compose-body")).toHaveValue(
+    "An unsent mobile draft.",
+  );
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Close new message" }).click();
+  await expect(page.locator("#composer")).not.toBeVisible();
+});
+
+test("mailbox panes and composer stay usable across phone, tablet and desktop widths", async ({
+  page,
+}) => {
+  await login(page);
+  for (const width of [320, 390, 680, 768, 960, 1024, 1440, 1920]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.locator("[data-inbox=all]").click();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await expect(page.locator("[data-inbox=admin]")).toBeInViewport();
+    await expect(
+      page.getByRole("button", { name: "Sign out" }).filter({ visible: true }),
+    ).toBeVisible();
+    await page
+      .getByRole("button", { name: "An HTML message — Support" })
+      .click();
+    await page
+      .getByRole("button", { name: /Reply from support@achswap.app/ })
+      .click();
+    await page
+      .getByRole("button", { name: "Send reply" })
+      .scrollIntoViewIfNeeded();
+    await expect(
+      page.getByRole("button", { name: "Send reply" }),
+    ).toBeInViewport();
+    expect(
+      await page
+        .locator("#reader")
+        .evaluate((reader) => reader.scrollWidth <= reader.clientWidth),
+    ).toBe(true);
+    await page
+      .getByRole("button", { name: "New message", exact: true })
+      .click();
+    expect(
+      await page
+        .locator("#composer")
+        .evaluate((composer) => composer.scrollWidth <= composer.clientWidth),
+    ).toBe(true);
+    await expect(
+      page.getByRole("button", { name: "Send message" }),
+    ).toBeInViewport();
+    await page.getByRole("button", { name: "Close new message" }).click();
+    if (width <= 960) {
+      await page.getByRole("button", { name: "Back to conversations" }).click();
+    }
+  }
 });
 test("API requires auth and denies direct requests to a different personal inbox", async ({
   page,
