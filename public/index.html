@@ -23,23 +23,40 @@
   .status { margin-top:14px; font-size:14px; text-align:center; min-height:20px; }
   .ok { color:#4ade80; } .err { color:#f87171; }
   .from { text-align:center; font-size:12px; color:#64748b; margin-top:12px; }
+  .topbar { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+  .user { font-size:13px; color:#94a3b8; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:70%; }
+  .logout { width:auto; margin:0; padding:8px 14px; font-size:13px; }
+  .hidden { display:none; }
   @media (max-width:480px){ .card{padding:20px;} body{padding:12px;} }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <div class="card">
+  <!-- LOGIN -->
+  <div class="card" id="loginCard">
+    <div class="logo">Ach<span>Swap</span></div>
+    <div class="sub">Team login — passwords are verified server-side</div>
+    <form id="loginForm">
+      <label for="email">Email</label>
+      <input id="email" type="email" placeholder="hossain@achswap.app" required autocomplete="username">
+      <label for="password">Password</label>
+      <input id="password" type="password" placeholder="••••••••" required autocomplete="current-password">
+      <button id="loginBtn" type="submit">Log in</button>
+      <div id="loginStatus" class="status"></div>
+    </form>
+  </div>
+
+  <!-- MAILER -->
+  <div class="card hidden" id="mailCard">
+    <div class="topbar">
+      <div class="user" id="userLabel"></div>
+      <button class="logout" id="logoutBtn" type="button">Log out</button>
+    </div>
     <div class="logo">Ach<span>Swap</span></div>
     <div class="sub">Send email via Resend</div>
     <form id="f">
       <label for="from">From</label>
-      <select id="from" required>
-        <option value="support@achswap.app" selected>support@achswap.app</option>
-        <option value="admin@achswap.app">admin@achswap.app</option>
-        <option value="sukanto@achswap.app">sukanto@achswap.app</option>
-        <option value="hossain@achswap.app">hossain@achswap.app</option>
-        <option value="asif@achswap.app">asif@achswap.app</option>
-      </select>
+      <select id="from" required></select>
       <label for="to">To mail</label>
       <input id="to" type="email" placeholder="customer@example.com" required>
       <label for="subject">Subject</label>
@@ -49,16 +66,88 @@
       <button id="btn" type="submit">Send email</button>
       <div id="status" class="status"></div>
     </form>
-    <div class="from">From: <span id="fromEcho">support@achswap.app</span></div>
+    <div class="from">From: <span id="fromEcho">—</span></div>
   </div>
 </div>
 <script>
+const KEY = 'achswap_token';
+const loginCard = document.getElementById('loginCard');
+const mailCard = document.getElementById('mailCard');
+const loginForm = document.getElementById('loginForm');
+const loginBtn = document.getElementById('loginBtn');
+const loginStatus = document.getElementById('loginStatus');
+const userLabel = document.getElementById('userLabel');
+const logoutBtn = document.getElementById('logoutBtn');
 const f = document.getElementById('f');
 const btn = document.getElementById('btn');
 const status = document.getElementById('status');
 const fromSel = document.getElementById('from');
 const fromEcho = document.getElementById('fromEcho');
+
+function getToken() { return localStorage.getItem(KEY) || ''; }
+function setToken(t) { if (t) localStorage.setItem(KEY, t); else localStorage.removeItem(KEY); }
+function authHeaders(extra) {
+  return Object.assign({ 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getToken() }, extra || {});
+}
+function showLogin() { loginCard.classList.remove('hidden'); mailCard.classList.add('hidden'); }
+function showMailer() { loginCard.classList.add('hidden'); mailCard.classList.remove('hidden'); }
+
+function fillSenders(senders) {
+  fromSel.innerHTML = '';
+  (senders && senders.length ? senders : ['support@achswap.app', 'admin@achswap.app']).forEach((s) => {
+    const o = document.createElement('option');
+    o.value = s; o.textContent = s;
+    fromSel.appendChild(o);
+  });
+  fromEcho.textContent = fromSel.value;
+}
 fromSel.addEventListener('change', () => { fromEcho.textContent = fromSel.value; });
+
+async function checkSession() {
+  const token = getToken();
+  if (!token) { showLogin(); return; }
+  try {
+    const res = await fetch('/api/me', { headers: { 'Authorization': 'Bearer ' + token } });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Session expired');
+    userLabel.textContent = '👤 ' + data.user.email;
+    fillSenders(data.user.senders);
+    showMailer();
+  } catch (err) {
+    setToken('');
+    showLogin();
+  }
+}
+
+loginForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  loginStatus.textContent = 'Checking...'; loginStatus.className = 'status';
+  loginBtn.disabled = true;
+  try {
+    const res = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: document.getElementById('email').value.trim(),
+        password: document.getElementById('password').value
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Login failed');
+    setToken(data.token);
+    userLabel.textContent = '👤 ' + data.user.email;
+    fillSenders(data.user.senders);
+    document.getElementById('password').value = '';
+    loginStatus.textContent = '';
+    showMailer();
+  } catch (err) {
+    loginStatus.textContent = '❌ ' + err.message;
+    loginStatus.className = 'status err';
+  } finally { loginBtn.disabled = false; }
+});
+
+logoutBtn.addEventListener('click', () => { setToken(''); showLogin(); });
+
 f.addEventListener('submit', async (e) => {
   e.preventDefault();
   status.textContent = 'Sending...'; status.className = 'status';
@@ -66,7 +155,7 @@ f.addEventListener('submit', async (e) => {
   try {
     const res = await fetch('/api/send', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders(),
       body: JSON.stringify({
         from: fromSel.value,
         to: document.getElementById('to').value.trim(),
@@ -75,16 +164,28 @@ f.addEventListener('submit', async (e) => {
       })
     });
     const data = await res.json();
+    if (res.status === 401) { setToken(''); showLogin(); throw new Error('Session expired. Please log in again.'); }
     if (!res.ok) throw new Error(data.error || 'Failed');
     status.textContent = '✅ Email sent! ID: ' + (data.id || 'ok');
     status.className = 'status ok';
     f.reset();
-    fromEcho.textContent = fromSel.value;
+    // re-fill From since reset() clears the select
+    await refreshSenders();
   } catch (err) {
     status.textContent = '❌ ' + err.message;
     status.className = 'status err';
   } finally { btn.disabled = false; }
 });
+
+async function refreshSenders() {
+  try {
+    const res = await fetch('/api/senders', { headers: { 'Authorization': 'Bearer ' + getToken() } });
+    const data = await res.json();
+    if (res.ok) fillSenders(data.senders);
+  } catch {}
+}
+
+checkSession();
 </script>
 </body>
 </html>

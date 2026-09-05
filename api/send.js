@@ -1,4 +1,5 @@
 import { sendMail, ALLOWED_SENDERS, normalizeSender } from "../send.js";
+import { requireAuth, getAllowedSendersForUser } from "../auth.js";
 
 function parseBody(req) {
   // Vercel (Node runtime) auto-parses JSON bodies, but handle string just in case.
@@ -16,7 +17,7 @@ function parseBody(req) {
 function setCors(res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 }
 
 export default async function handler(req, res) {
@@ -27,8 +28,14 @@ export default async function handler(req, res) {
   }
 
   if (req.method === "GET") {
-    // Handy for populating the From dropdown / health checks.
-    return res.status(200).json({ ok: true, senders: ALLOWED_SENDERS });
+    // Handy for populating the From dropdown / health checks (auth required).
+    const session = requireAuth(req);
+    if (!session) {
+      return res.status(401).json({ error: "Unauthorized. Please log in." });
+    }
+    return res
+      .status(200)
+      .json({ ok: true, senders: getAllowedSendersForUser(session.email) });
   }
 
   if (req.method !== "POST") {
@@ -36,16 +43,27 @@ export default async function handler(req, res) {
   }
 
   try {
+    const session = requireAuth(req);
+    if (!session) {
+      return res.status(401).json({ error: "Unauthorized. Please log in." });
+    }
+    const allowed = getAllowedSendersForUser(session.email);
     const { to, subject, message, from } = parseBody(req) || {};
 
     if (!to || !subject || !message) {
       return res.status(400).json({ error: "Fields required: to, subject, message" });
     }
 
-    if (from && !normalizeSender(from)) {
+    const sender = from ? normalizeSender(from) : ALLOWED_SENDERS[0];
+    if (!sender) {
       return res
         .status(400)
         .json({ error: `Invalid 'from'. Allowed: ${ALLOWED_SENDERS.join(", ")}` });
+    }
+    if (!allowed.includes(sender)) {
+      return res
+        .status(403)
+        .json({ error: `Not allowed to send from '${sender}'. Allowed: ${allowed.join(", ")}` });
     }
 
     const list = Array.isArray(to)
@@ -60,7 +78,7 @@ export default async function handler(req, res) {
       to: list,
       subject: String(subject),
       message: String(message),
-      from: from ? normalizeSender(from) : undefined,
+      from: sender,
     });
 
     return res.status(200).json({ ok: true, id: data?.id, data });

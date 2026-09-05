@@ -4,10 +4,14 @@ import { Resend } from "resend";
 export const ALLOWED_SENDERS = [
   "support@achswap.app",
   "admin@achswap.app",
-  "sukanto@achswap.app",
-  "hossain@achswap.app",
-  "asif@achswap.app",
 ];
+// Personal addresses exist in Resend but are NOT enabled yet.
+// Uncomment / add per-user mapping here when they get connected.
+// const PERSONAL_SENDERS = [
+//   "sukanto@achswap.app",
+//   "hossain@achswap.app",
+//   "asif@achswap.app",
+// ];
 
 export const DEFAULT_SENDER = ALLOWED_SENDERS[0];
 
