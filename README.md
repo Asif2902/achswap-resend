@@ -1,4 +1,4 @@
-# AchSwap Mailer (Resend)
+# AchSwap Mailer (Resend
 
 Simple mail sender with selectable From address. Responsive email template (mobile + PC).
 
