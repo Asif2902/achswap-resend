@@ -1,8 +1,8 @@
 import "dotenv/config";
 import crypto from "crypto";
 
-// Default senders every team member gets. Personal addresses
-// (hossain@, sukanto@, asif@) are NOT enabled yet.
+// Default senders every team member gets, plus their own personal address.
+// e.g. asif@achswap.app -> [support, admin, asif@], but NOT sukanto@/hossain@.
 export const DEFAULT_SENDERS = ["support@achswap.app", "admin@achswap.app"];
 
 export function getAuthSecret() {
@@ -43,10 +43,14 @@ export function getUsers() {
 }
 
 export function getAllowedSendersForUser(email) {
+  const norm = String(email || "").trim().toLowerCase();
   const users = getUsers().map((u) => u.email);
-  if (!users.includes(String(email || "").trim().toLowerCase())) return [];
-  // All three team members get support + admin by default.
-  return [...DEFAULT_SENDERS];
+  if (!users.includes(norm)) return [];
+  // Shared addresses + own personal address only.
+  // Asif can use support/admin/asif@ but never sukanto@/hossain@, etc.
+  const senders = [...DEFAULT_SENDERS];
+  if (!senders.includes(norm)) senders.push(norm);
+  return senders;
 }
 
 function safeEqual(a, b) {

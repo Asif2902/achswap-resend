@@ -4,14 +4,13 @@ import { Resend } from "resend";
 export const ALLOWED_SENDERS = [
   "support@achswap.app",
   "admin@achswap.app",
+  "hossain@achswap.app",
+  "sukanto@achswap.app",
+  "asif@achswap.app",
 ];
-// Personal addresses exist in Resend but are NOT enabled yet.
-// Uncomment / add per-user mapping here when they get connected.
-// const PERSONAL_SENDERS = [
-//   "sukanto@achswap.app",
-//   "hossain@achswap.app",
-//   "asif@achswap.app",
-// ];
+// Global allowlist = every address Resend may send from.
+// Per-user restriction (support+admin+own personal only) is enforced
+// server-side via getAllowedSendersForUser() in auth.js.
 
 export const DEFAULT_SENDER = ALLOWED_SENDERS[0];
 

@@ -64,8 +64,8 @@ app.post("/api/send", async (req, res) => {
         .status(400)
         .json({ error: `Invalid 'from'. Allowed: ${ALLOWED_SENDERS.join(", ")}` });
     }
-    // Per-user enforcement: this user may only send from their own allowed list
-    // (support + admin by default — no personal addresses yet).
+    // Per-user enforcement: shared (support/admin) + own personal only.
+    // e.g. Asif -> support/admin/asif@, never sukanto@/hossain@.
     if (!allowed.includes(sender)) {
       return res
         .status(403)
