@@ -41,7 +41,7 @@ npm i -g vercel
 vercel
 ```
 
-Then in Vercel Dashboard → Project → Settings → Environment Variables, add:
+Then in Vercel Dashboard → Project → Settings → Enviroment Variables, add:
 
 ```
 RESEND_API_KEY=re_xxxx
