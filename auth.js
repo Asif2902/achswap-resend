@@ -3,7 +3,13 @@ import crypto from "crypto";
 
 // Default senders every team member gets, plus their own personal address.
 // e.g. asif@achswap.app -> [support, admin, asif@], but NOT sukanto@/hossain@.
-export const DEFAULT_SENDERS = ["support@achswap.app", "admin@achswap.app"];
+export const EMAIL_DOMAIN = (
+  process.env.EMAIL_DOMAIN || "achswap.app"
+).toLowerCase();
+export const DEFAULT_SENDERS = [
+  `support@${EMAIL_DOMAIN}`,
+  `admin@${EMAIL_DOMAIN}`,
+];
 
 export function getAuthSecret() {
   return process.env.AUTH_SECRET || "";
@@ -16,7 +22,8 @@ function unquote(v) {
   if (s.length >= 2) {
     const f = s[0];
     const l = s[s.length - 1];
-    if ((f === '"' && l === '"') || (f === "'" && l === "'")) return s.slice(1, -1);
+    if ((f === '"' && l === '"') || (f === "'" && l === "'"))
+      return s.slice(1, -1);
   }
   return s;
 }
@@ -24,26 +31,57 @@ function unquote(v) {
 // Users come ONLY from server-side env vars (never sent to the client).
 // Set these in `.env` locally and in Vercel Dashboard -> Settings -> Environment Variables.
 export function getUsers() {
+  if (process.env.TEAM_USERS_JSON) {
+    try {
+      const entries = JSON.parse(process.env.TEAM_USERS_JSON);
+      if (!Array.isArray(entries)) return [];
+      return entries
+        .map((u) => ({
+          email: String(u.email || "")
+            .trim()
+            .toLowerCase(),
+          pass: String(u.password || ""),
+        }))
+        .filter(
+          (u) =>
+            u.pass &&
+            u.email.endsWith(`@${EMAIL_DOMAIN}`) &&
+            /^[^\s@]+@[^\s@]+$/.test(u.email),
+        );
+    } catch {
+      return [];
+    }
+  }
   const users = [
     {
-      email: (process.env.USER_HOSSAIN_EMAIL || "hossain@achswap.app").trim().toLowerCase(),
+      email: (process.env.USER_HOSSAIN_EMAIL || "hossain@achswap.app")
+        .trim()
+        .toLowerCase(),
       pass: unquote(process.env.USER_HOSSAIN_PASS || ""),
     },
     {
-      email: (process.env.USER_SUKANTO_EMAIL || "sukanto@achswap.app").trim().toLowerCase(),
+      email: (process.env.USER_SUKANTO_EMAIL || "sukanto@achswap.app")
+        .trim()
+        .toLowerCase(),
       pass: unquote(process.env.USER_SUKANTO_PASS || ""),
     },
     {
-      email: (process.env.USER_ASIF_EMAIL || "asif@achswap.app").trim().toLowerCase(),
+      email: (process.env.USER_ASIF_EMAIL || "asif@achswap.app")
+        .trim()
+        .toLowerCase(),
       pass: unquote(process.env.USER_ASIF_PASS || ""),
     },
   ];
   // Drop entries with no password configured so a missing env var = disabled login.
-  return users.filter((u) => u.email && u.pass);
+  return users.filter(
+    (u) => u.email && u.pass && u.email.endsWith(`@${EMAIL_DOMAIN}`),
+  );
 }
 
 export function getAllowedSendersForUser(email) {
-  const norm = String(email || "").trim().toLowerCase();
+  const norm = String(email || "")
+    .trim()
+    .toLowerCase();
   const users = getUsers().map((u) => u.email);
   if (!users.includes(norm)) return [];
   // Shared addresses + own personal address only.
@@ -61,7 +99,9 @@ function safeEqual(a, b) {
 }
 
 export function verifyCredentials(email, password) {
-  const norm = String(email || "").trim().toLowerCase();
+  const norm = String(email || "")
+    .trim()
+    .toLowerCase();
   const user = getUsers().find((u) => safeEqual(u.email, norm));
   if (!user) return null;
   if (!safeEqual(user.pass, String(password ?? ""))) return null;
@@ -75,13 +115,17 @@ const TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 export function createSessionToken(email) {
   const secret = getAuthSecret();
-  if (!secret) throw new Error("Missing AUTH_SECRET. Set it in .env / Vercel env vars.");
+  if (!secret)
+    throw new Error("Missing AUTH_SECRET. Set it in .env / Vercel env vars.");
   const payload = JSON.stringify({
     email: String(email).trim().toLowerCase(),
     exp: Date.now() + TOKEN_TTL_MS,
   });
   const b64 = Buffer.from(payload, "utf8").toString("base64url");
-  const sig = crypto.createHmac("sha256", secret).update(b64).digest("base64url");
+  const sig = crypto
+    .createHmac("sha256", secret)
+    .update(b64)
+    .digest("base64url");
   return `${b64}.${sig}`;
 }
 
@@ -92,7 +136,10 @@ export function verifySessionToken(token) {
     const parts = String(token).split(".");
     if (parts.length !== 2) return null;
     const [b64, sig] = parts;
-    const expected = crypto.createHmac("sha256", secret).update(b64).digest("base64url");
+    const expected = crypto
+      .createHmac("sha256", secret)
+      .update(b64)
+      .digest("base64url");
     if (!safeEqual(sig, expected)) return null;
     const payload = JSON.parse(Buffer.from(b64, "base64url").toString("utf8"));
     if (!payload.email || !payload.exp || Date.now() > payload.exp) return null;

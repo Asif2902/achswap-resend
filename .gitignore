@@ -2,3 +2,7 @@ node_modules/
 .env
 .vercel
 .env*
+!.env.example
+*.db*
+test-results/
+playwright-report/

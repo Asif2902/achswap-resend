@@ -1,191 +1,211 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AchSwap — Send Mail</title>
-<style>
-  * { box-sizing: border-box; }
-  body { margin:0; font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; background:#0f172a; color:#e2e8f0; min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px; }
-  .wrap { width:100%; max-width:520px; }
-  .card { background:#1e293b; border:1px solid #334155; border-radius:20px; padding:28px; box-shadow:0 20px 60px rgba(0,0,0,.4); }
-  .logo { font-size:24px; font-weight:800; letter-spacing:-.5px; color:#fff; text-align:center; }
-  .logo span { color:#818cf8; }
-  .sub { text-align:center; color:#94a3b8; font-size:13px; margin:6px 0 22px; }
-  label { display:block; font-size:13px; font-weight:600; color:#cbd5e1; margin:14px 0 6px; }
-  input, textarea, select { width:100%; background:#0f172a; border:1px solid #334155; border-radius:12px; color:#f1f5f9; padding:12px 14px; font-size:15px; outline:none; transition:.15s; }
-  input:focus, textarea:focus, select:focus { border-color:#6366f1; box-shadow:0 0 0 3px rgba(99,102,241,.25); }
-  select { appearance:none; cursor:pointer; }
-  select option { background:#0f172a; }
-  textarea { min-height:140px; resize:vertical; line-height:1.5; }
-  button { width:100%; margin-top:18px; background:linear-gradient(90deg,#6366f1,#8b5cf6); border:none; color:#fff; font-size:16px; font-weight:700; padding:14px; border-radius:12px; cursor:pointer; transition:.15s; }
-  button:hover { opacity:.9; } button:disabled { opacity:.5; cursor:not-allowed; }
-  .status { margin-top:14px; font-size:14px; text-align:center; min-height:20px; }
-  .ok { color:#4ade80; } .err { color:#f87171; }
-  .from { text-align:center; font-size:12px; color:#64748b; margin-top:12px; }
-  .topbar { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
-  .user { font-size:13px; color:#94a3b8; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:70%; }
-  .logout { width:auto; margin:0; padding:8px 14px; font-size:13px; }
-  .hidden { display:none; }
-  @media (max-width:480px){ .card{padding:20px;} body{padding:12px;} }
-</style>
-</head>
-<body>
-<div class="wrap">
-  <!-- LOGIN -->
-  <div class="card" id="loginCard">
-    <div class="logo">Ach<span>Swap</span></div>
-    <div class="sub">Team login — passwords are verified server-side</div>
-    <form id="loginForm">
-      <label for="email">Email</label>
-      <input id="email" type="email" placeholder="you@achswap.app" required autocomplete="username">
-      <label for="password">Password</label>
-      <input id="password" type="password" placeholder="••••••••" required autocomplete="current-password">
-      <button id="loginBtn" type="submit">Log in</button>
-      <div id="loginStatus" class="status"></div>
-    </form>
-  </div>
-
-  <!-- MAILER -->
-  <div class="card hidden" id="mailCard">
-    <div class="topbar">
-      <div class="user" id="userLabel"></div>
-      <button class="logout" id="logoutBtn" type="button">Log out</button>
-    </div>
-    <div class="logo">Ach<span>Swap</span></div>
-    <div class="sub">Send email via Resend</div>
-    <form id="f">
-      <label for="from">From</label>
-      <select id="from" required></select>
-      <label for="to">To mail</label>
-      <input id="to" type="email" placeholder="customer@example.com" required>
-      <label for="subject">Subject</label>
-      <input id="subject" type="text" placeholder="Welcome to AchSwap!" required>
-      <label for="message">Message</label>
-      <textarea id="message" placeholder="Write your message here...&#10;&#10;Line breaks are kept." required></textarea>
-      <button id="btn" type="submit">Send email</button>
-      <div id="status" class="status"></div>
-    </form>
-    <div class="from">From: <span id="fromEcho">—</span></div>
-  </div>
-</div>
-<script>
-const KEY = 'achswap_token';
-const loginCard = document.getElementById('loginCard');
-const mailCard = document.getElementById('mailCard');
-const loginForm = document.getElementById('loginForm');
-const loginBtn = document.getElementById('loginBtn');
-const loginStatus = document.getElementById('loginStatus');
-const userLabel = document.getElementById('userLabel');
-const logoutBtn = document.getElementById('logoutBtn');
-const f = document.getElementById('f');
-const btn = document.getElementById('btn');
-const status = document.getElementById('status');
-const fromSel = document.getElementById('from');
-const fromEcho = document.getElementById('fromEcho');
-
-function getToken() { return localStorage.getItem(KEY) || ''; }
-function setToken(t) { if (t) localStorage.setItem(KEY, t); else localStorage.removeItem(KEY); }
-function authHeaders(extra) {
-  return Object.assign({ 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getToken() }, extra || {});
-}
-function showLogin() { loginCard.classList.remove('hidden'); mailCard.classList.add('hidden'); }
-function showMailer() { loginCard.classList.add('hidden'); mailCard.classList.remove('hidden'); }
-
-function fillSenders(senders) {
-  fromSel.innerHTML = '';
-  (senders && senders.length ? senders : ['support@achswap.app', 'admin@achswap.app']).forEach((s) => {
-    const o = document.createElement('option');
-    o.value = s; o.textContent = s;
-    fromSel.appendChild(o);
-  });
-  fromEcho.textContent = fromSel.value;
-}
-fromSel.addEventListener('change', () => { fromEcho.textContent = fromSel.value; });
-
-async function checkSession() {
-  const token = getToken();
-  if (!token) { showLogin(); return; }
-  try {
-    const res = await fetch('/api/me', { headers: { 'Authorization': 'Bearer ' + token } });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Session expired');
-    userLabel.textContent = '👤 ' + data.user.email;
-    fillSenders(data.user.senders);
-    showMailer();
-  } catch (err) {
-    setToken('');
-    showLogin();
-  }
-}
-
-loginForm.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  loginStatus.textContent = 'Checking...'; loginStatus.className = 'status';
-  loginBtn.disabled = true;
-  try {
-    const res = await fetch('/api/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: document.getElementById('email').value.trim(),
-        password: document.getElementById('password').value
-      })
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Login failed');
-    setToken(data.token);
-    userLabel.textContent = '👤 ' + data.user.email;
-    fillSenders(data.user.senders);
-    document.getElementById('password').value = '';
-    loginStatus.textContent = '';
-    showMailer();
-  } catch (err) {
-    loginStatus.textContent = '❌ ' + err.message;
-    loginStatus.className = 'status err';
-  } finally { loginBtn.disabled = false; }
-});
-
-logoutBtn.addEventListener('click', () => { setToken(''); showLogin(); });
-
-f.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  status.textContent = 'Sending...'; status.className = 'status';
-  btn.disabled = true;
-  try {
-    const res = await fetch('/api/send', {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify({
-        from: fromSel.value,
-        to: document.getElementById('to').value.trim(),
-        subject: document.getElementById('subject').value.trim(),
-        message: document.getElementById('message').value
-      })
-    });
-    const data = await res.json();
-    if (res.status === 401) { setToken(''); showLogin(); throw new Error('Session expired. Please log in again.'); }
-    if (!res.ok) throw new Error(data.error || 'Failed');
-    status.textContent = '✅ Email sent! ID: ' + (data.id || 'ok');
-    status.className = 'status ok';
-    f.reset();
-    // re-fill From since reset() clears the select
-    await refreshSenders();
-  } catch (err) {
-    status.textContent = '❌ ' + err.message;
-    status.className = 'status err';
-  } finally { btn.disabled = false; }
-});
-
-async function refreshSenders() {
-  try {
-    const res = await fetch('/api/senders', { headers: { 'Authorization': 'Bearer ' + getToken() } });
-    const data = await res.json();
-    if (res.ok) fillSenders(data.senders);
-  } catch {}
-}
-
-checkSession();
-</script>
-</body>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>AchSwap Mail</title>
+    <link rel="stylesheet" href="/mail.css" />
+    <script src="/mail.js" defer></script>
+  </head>
+  <body>
+    <main id="login" class="login-shell">
+      <section class="login-card">
+        <div class="brand">
+          <span class="brand-icon">a</span>AchSwap
+          <span class="muted">/ Mail</span>
+        </div>
+        <div class="eyebrow">YOUR TEAM, IN SYNC</div>
+        <h1>A little less noise.<br />A better inbox.</h1>
+        <p class="muted">Sign in to your personal and shared team mail.</p>
+        <form id="login-form">
+          <label
+            >Email address<input
+              name="email"
+              type="email"
+              required
+              autocomplete="username"
+              placeholder="you@achswap.app" /></label
+          ><label
+            >Password<input
+              name="password"
+              type="password"
+              required
+              autocomplete="current-password"
+              placeholder="Your team password" /></label
+          ><button class="primary" type="submit">Sign in <span>→</span></button>
+          <p id="login-error" class="error" role="alert"></p>
+        </form>
+        <div class="login-note">One workspace. The right conversations.</div>
+      </section>
+    </main>
+    <main id="workspace" class="workspace" hidden>
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-icon">a</span>AchSwap
+          <span class="muted">Mail</span>
+        </div>
+        <button
+          id="compose"
+          aria-label="New message"
+          class="primary compose-button"
+        >
+          <span>＋</span> New message
+        </button>
+        <div class="nav-label">WORKSPACE</div>
+        <nav aria-label="Mailboxes">
+          <button class="nav-item active" data-inbox="all">
+            <span class="nav-icon">▤</span>All mail<span
+              class="count"
+              data-count="all"
+            ></span>
+          </button>
+          <button class="nav-item" data-inbox="personal">
+            <span class="nav-icon">◎</span>Personal<span
+              class="count"
+              data-count="personal"
+            ></span>
+          </button>
+          <div class="nav-label shared-label">SHARED INBOXES</div>
+          <button class="nav-item" data-inbox="support">
+            <span class="nav-icon">◇</span>Support<span
+              class="count"
+              data-count="support"
+            ></span>
+          </button>
+          <button class="nav-item" data-inbox="admin">
+            <span class="nav-icon">▦</span>Admin<span
+              class="count"
+              data-count="admin"
+            ></span>
+          </button>
+        </nav>
+        <div class="sidebar-bottom">
+          <div class="workspace-note">
+            <span class="green-dot"></span>A place for every conversation
+          </div>
+          <div class="profile">
+            <span id="avatar" class="avatar"></span>
+            <div>
+              <strong id="user-name"></strong><small id="user-email"></small>
+            </div>
+            <button
+              id="logout"
+              class="icon-button"
+              title="Sign out"
+              aria-label="Sign out"
+            >
+              ↪
+            </button>
+          </div>
+        </div>
+      </aside>
+      <section class="mail-pane">
+        <header class="mail-toolbar">
+          <div>
+            <div class="eyebrow">TEAM WORKSPACE</div>
+            <h1 id="inbox-title">All mail</h1>
+          </div>
+          <div class="toolbar-actions">
+            <form id="search-form" role="search">
+              <span>⌕</span
+              ><input
+                id="search"
+                aria-label="Search mail"
+                placeholder="Search conversations…"
+              />
+            </form>
+            <button
+              id="refresh"
+              class="icon-button"
+              title="Refresh mail"
+              aria-label="Refresh mail"
+            >
+              ↻
+            </button>
+          </div>
+        </header>
+        <div class="mail-layout">
+          <section class="list-pane" aria-label="Conversations">
+            <div class="list-top">
+              <div class="tabs" aria-label="Message filter">
+                <button class="active" data-view="all">All</button
+                ><button data-view="unread">Unread</button
+                ><button data-view="sent">Sent</button>
+              </div>
+              <span id="result-count" class="muted"></span>
+            </div>
+            <div id="list-error" class="error list-error" role="alert"></div>
+            <div
+              id="conversation-list"
+              class="conversation-list"
+              aria-live="polite"
+            ></div>
+            <button id="load-more" class="load-more" hidden>
+              Load more conversations
+            </button>
+          </section>
+          <section id="reader" class="reader" aria-label="Conversation">
+            <div class="reader-empty">
+              <span class="empty-symbol">↗</span>
+              <h2>Room to focus.</h2>
+              <p>
+                Choose a conversation to read and reply.<br />Everything stays
+                in its own inbox.
+              </p>
+            </div>
+          </section>
+        </div>
+      </section>
+    </main>
+    <dialog id="composer">
+      <form id="compose-form">
+        <header class="dialog-head">
+          <div>
+            <div class="eyebrow">A NEW CONVERSATION</div>
+            <h2>New message</h2>
+          </div>
+          <button
+            type="button"
+            id="close-compose"
+            class="icon-button"
+            aria-label="Close new message"
+          >
+            ×
+          </button>
+        </header>
+        <label>From<select id="compose-from" required></select></label
+        ><label
+          >To<input
+            id="compose-to"
+            required
+            placeholder="name@example.com"
+            autocomplete="off" /></label
+        ><label
+          >CC <span class="muted">optional</span
+          ><input
+            id="compose-cc"
+            placeholder="Separate addresses with commas"
+            autocomplete="off" /></label
+        ><label
+          >Subject<input
+            id="compose-subject"
+            required
+            maxlength="998"
+            placeholder="What’s on your mind?" /></label
+        ><label class="sr-only" for="compose-body">Message</label
+        ><textarea
+          id="compose-body"
+          required
+          maxlength="100000"
+          placeholder="Write your message…"
+        ></textarea>
+        <p id="compose-error" class="error" role="alert"></p>
+        <footer>
+          <span class="muted">Saved in your conversation when sent.</span
+          ><button class="primary" type="submit">Send message ↗</button>
+        </footer>
+      </form>
+    </dialog>
+    <div id="toast" class="toast" role="status" hidden></div>
+  </body>
 </html>
