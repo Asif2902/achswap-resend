@@ -4,6 +4,12 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>AchSwap Mail</title>
+    <link
+      rel="icon"
+      type="image/png"
+      href="/img/achswap-app-icon-rounded-192.png"
+    />
+    <link rel="apple-touch-icon" href="/img/achswap-app-icon-rounded-192.png" />
     <link rel="stylesheet" href="/mail.css" />
     <script src="/mail.js" defer></script>
   </head>
@@ -11,7 +17,13 @@
     <main id="login" class="login-shell">
       <section class="login-card">
         <div class="brand">
-          <span class="brand-icon">a</span>AchSwap
+          <img
+            class="brand-icon"
+            src="/img/achswap-app-icon-rounded-192.png"
+            alt=""
+            width="30"
+            height="30"
+          />AchSwap
           <span class="muted">/ Mail</span>
         </div>
         <div class="eyebrow">YOUR TEAM, IN SYNC</div>
@@ -41,7 +53,13 @@
     <main id="workspace" class="workspace" hidden>
       <aside class="sidebar">
         <div class="brand">
-          <span class="brand-icon">a</span>AchSwap
+          <img
+            class="brand-icon"
+            src="/img/achswap-app-icon-rounded-192.png"
+            alt=""
+            width="30"
+            height="30"
+          />AchSwap
           <span class="muted">Mail</span>
         </div>
         <button
@@ -51,7 +69,6 @@
         >
           <span>＋</span> New message
         </button>
-        <div class="nav-label">WORKSPACE</div>
         <nav aria-label="Mailboxes">
           <button class="nav-item active" data-inbox="all">
             <span class="nav-icon">▤</span>All mail<span
@@ -65,7 +82,7 @@
               data-count="personal"
             ></span>
           </button>
-          <div class="nav-label shared-label">SHARED INBOXES</div>
+          <div class="nav-label shared-label">Shared</div>
           <button class="nav-item" data-inbox="support">
             <span class="nav-icon">◇</span>Support<span
               class="count"
@@ -102,7 +119,6 @@
       <section class="mail-pane">
         <header class="mail-toolbar">
           <div>
-            <div class="eyebrow">TEAM WORKSPACE</div>
             <h1 id="inbox-title">All mail</h1>
           </div>
           <div class="toolbar-actions">

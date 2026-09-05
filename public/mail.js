@@ -473,20 +473,40 @@ function renderReply() {
   const slot = $("#reply-slot");
   if (!slot) return;
   slot.replaceChildren();
-  let target =
-    state.messages.find((m) => m.id === state.replyDraft?.replyTo) ||
-    [...state.messages].reverse().find((m) => m.delivery_status !== "pending");
-  if (!target) return;
-  if (!state.replyDraft)
-    state.replyDraft = {
-      replyTo: target.id,
-      message: "",
-      requestId: crypto.randomUUID(),
-    };
+  if (!state.replyDraft) {
+    const target = [...state.messages]
+      .reverse()
+      .find((m) => m.delivery_status !== "pending");
+    if (!target) return;
+    const trigger = el("button", "reply-trigger");
+    trigger.type = "button";
+    trigger.append(
+      el("span", "reply-trigger-icon", "↩"),
+      el("span", "", "Reply"),
+      el("small", "", `from ${state.thread.inbox_address}`),
+    );
+    trigger.addEventListener("click", () => {
+      state.replyDraft = {
+        replyTo: target.id,
+        message: "",
+        requestId: crypto.randomUUID(),
+      };
+      renderReply();
+      $("#reply-body")?.focus();
+    });
+    slot.append(trigger);
+    return;
+  }
+  const target = state.messages.find((m) => m.id === state.replyDraft.replyTo);
+  if (!target) {
+    state.replyDraft = null;
+    renderReply();
+    return;
+  }
   const form = el("form", "reply-form");
   const head = el("div", "reply-head");
   head.append(
-    document.createTextNode("↶ Reply from "),
+    document.createTextNode("Replying as "),
     el("strong", "", state.thread.inbox_address),
   );
   const recipients =
@@ -495,10 +515,10 @@ function renderReply() {
       : target.reply_to.length
         ? target.reply_to
         : [{ address: target.from_email }];
-  head.append(el("div", "message-addresses", `To: ${addressText(recipients)}`));
+  head.append(el("div", "message-addresses", `To ${addressText(recipients)}`));
   const textarea = el("textarea");
   textarea.id = "reply-body";
-  textarea.placeholder = "Write a thoughtful reply…";
+  textarea.placeholder = "Write a reply…";
   textarea.setAttribute("aria-label", "Reply message");
   textarea.required = true;
   textarea.maxLength = 100000;
@@ -511,16 +531,21 @@ function renderReply() {
   const error = el("p", "error");
   error.setAttribute("role", "alert");
   const footer = el("div", "reply-footer");
+  const cancel = el("button", "cancel-reply", "Discard");
+  cancel.type = "button";
+  cancel.addEventListener("click", () => {
+    if (state.replyDraft.message && !window.confirm("Discard this reply?"))
+      return;
+    state.replyDraft = null;
+    renderReply();
+  });
   const send = el(
     "button",
     "primary",
     state.replyDraft.attempted ? "Retry same reply ↗" : "Send reply ↗",
   );
   send.type = "submit";
-  footer.append(
-    el("span", "muted", "Your reply stays in this conversation."),
-    send,
-  );
+  footer.append(cancel, send);
   form.append(head, textarea, error, footer);
   slot.append(form);
   form.addEventListener("submit", async (event) => {

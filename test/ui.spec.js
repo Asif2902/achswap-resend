@@ -19,10 +19,16 @@ test("filters isolate personal mail; support reply uses support and is persisted
   await page
     .getByRole("button", { name: "Notes for our next conversation — Personal" })
     .click();
+  await page
+    .getByRole("button", { name: /Reply from asif@achswap.app/ })
+    .click();
   await expect(page.locator(".reply-head")).toContainText("asif@achswap.app");
   await page.locator("[data-inbox=support]").click();
   await page
     .getByRole("button", { name: "A quick question about my swap — Support" })
+    .click();
+  await page
+    .getByRole("button", { name: /Reply from support@achswap.app/ })
     .click();
   await expect(page.locator(".reply-head")).toContainText(
     "support@achswap.app",
@@ -88,6 +94,9 @@ test("mobile mailbox, reader and composer fit the viewport", async ({
   await page.locator("[data-inbox=admin]").click();
   await page
     .getByRole("button", { name: "September workspace review — Admin" })
+    .click();
+  await page
+    .getByRole("button", { name: /Reply from admin@achswap.app/ })
     .click();
   await expect(
     page.getByRole("button", { name: "Back to conversations" }),

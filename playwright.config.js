@@ -11,7 +11,7 @@ export default defineConfig({
   webServer: {
     command: "node test/ui-server.mjs",
     url: "http://127.0.0.1:3031",
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: false,
   },
   reporter: "list",
 });
