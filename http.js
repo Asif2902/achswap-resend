@@ -34,7 +34,15 @@ export function authenticated(method, operation) {
       if (error instanceof MailError)
         return res.status(error.status).json({ error: error.message });
       const incident = crypto.randomUUID();
-      console.error(JSON.stringify({ event: "mail_api_failed", incident }));
+      console.error(
+        JSON.stringify({
+          event: "mail_api_failed",
+          incident,
+          message: error?.message || String(error),
+          code: error?.code,
+          stack: error?.stack?.split("\n").slice(0, 5).join("\n"),
+        }),
+      );
       return res
         .status(503)
         .json({
