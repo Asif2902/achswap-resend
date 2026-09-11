@@ -242,6 +242,21 @@ async function enter(user) {
   $("#user-email").textContent = user.email;
   $("#user-name").textContent = user.email.split("@")[0];
   $("#avatar").textContent = initials(user.email);
+  // Support-restricted members (admin + personal only) never see Support.
+  const supportAddress = `support@${user.email.split("@")[1]}`;
+  const canSeeSupport = (user.senders || []).includes(supportAddress);
+  const supportButton = document.querySelector('[data-inbox="support"]');
+  if (supportButton) supportButton.hidden = !canSeeSupport;
+  if (!canSeeSupport && state.inbox === "support") {
+    state.inbox = "all";
+    $("#inbox-title").textContent = inboxName(state.inbox);
+    document.querySelectorAll("[data-inbox]").forEach((b) => {
+      const active = b.dataset.inbox === state.inbox;
+      b.classList.toggle("active", active);
+      if (active) b.setAttribute("aria-current", "page");
+      else b.removeAttribute("aria-current");
+    });
+  }
   $("#compose-from").replaceChildren(
     ...user.senders.map((address) => {
       const option = el("option", "", address);
@@ -889,10 +904,15 @@ function resetComposer() {
 $("#compose").addEventListener("click", () => {
   if (!state.composeRequest) {
     resetComposer();
-    $("#compose-from").value =
+    const preferred =
       state.inbox === "support" || state.inbox === "admin"
         ? `${state.inbox}@${state.user.email.split("@")[1]}`
         : state.user.email;
+    // Fall back to personal when the preferred sender is not allowed
+    // (e.g. support-restricted members).
+    $("#compose-from").value = (state.user.senders || []).includes(preferred)
+      ? preferred
+      : state.user.email;
     state.composeRequest = { requestId: crypto.randomUUID() };
   }
   $("#composer").showModal();

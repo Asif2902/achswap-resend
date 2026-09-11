@@ -1,8 +1,9 @@
 import "dotenv/config";
 import crypto from "crypto";
 
-// Default senders every team member gets, plus their own personal address.
+// Default senders most team members get, plus their own personal address.
 // e.g. asif@achswap.app -> [support, admin, asif@], but NOT sukanto@/hossain@.
+// Support-restricted members (koushik@/rollins@) get [admin, own personal] only.
 export const EMAIL_DOMAIN = (
   process.env.EMAIL_DOMAIN || "achswap.app"
 ).toLowerCase();
@@ -30,6 +31,21 @@ function unquote(v) {
 
 // Users come ONLY from server-side env vars (never sent to the client).
 // Set these in `.env` locally and in Vercel Dashboard -> Settings -> Environment Variables.
+//
+// Per-user inbox scope: most members get support + admin + personal.
+// Koushik and Rollins get admin + personal ONLY (no support access).
+// For TEAM_USERS_JSON, an entry is support-restricted when it sets
+// `"allowSupport": false` (or `"support": false`), or when its optional
+// `"inboxes"` list does not include `"support"`. Entries without any of
+// those fields keep full support access.
+function hasSupportAccess(entry) {
+  if (!entry || typeof entry !== "object") return true;
+  if (entry.allowSupport === false || entry.support === false) return false;
+  if (Array.isArray(entry.inboxes))
+    return entry.inboxes.map((v) => String(v).toLowerCase()).includes("support");
+  return true;
+}
+
 export function getUsers() {
   if (process.env.TEAM_USERS_JSON) {
     try {
@@ -41,6 +57,7 @@ export function getUsers() {
             .trim()
             .toLowerCase(),
           pass: String(u.password || ""),
+          allowSupport: hasSupportAccess(u),
         }))
         .filter(
           (u) =>
@@ -52,25 +69,33 @@ export function getUsers() {
       return [];
     }
   }
+  const legacy = (
+    emailEnv,
+    emailDefault,
+    passEnv,
+    allowSupport = true,
+  ) => ({
+    email: (process.env[emailEnv] || emailDefault).trim().toLowerCase(),
+    pass: unquote(process.env[passEnv] || ""),
+    allowSupport,
+  });
   const users = [
-    {
-      email: (process.env.USER_HOSSAIN_EMAIL || "hossain@achswap.app")
-        .trim()
-        .toLowerCase(),
-      pass: unquote(process.env.USER_HOSSAIN_PASS || ""),
-    },
-    {
-      email: (process.env.USER_SUKANTO_EMAIL || "sukanto@achswap.app")
-        .trim()
-        .toLowerCase(),
-      pass: unquote(process.env.USER_SUKANTO_PASS || ""),
-    },
-    {
-      email: (process.env.USER_ASIF_EMAIL || "asif@achswap.app")
-        .trim()
-        .toLowerCase(),
-      pass: unquote(process.env.USER_ASIF_PASS || ""),
-    },
+    legacy("USER_HOSSAIN_EMAIL", "hossain@achswap.app", "USER_HOSSAIN_PASS"),
+    legacy("USER_SUKANTO_EMAIL", "sukanto@achswap.app", "USER_SUKANTO_PASS"),
+    legacy("USER_ASIF_EMAIL", "asif@achswap.app", "USER_ASIF_PASS"),
+    // Admin-only: admin inbox + personal only, no support access.
+    legacy(
+      "USER_KOUSHIK_EMAIL",
+      "koushik@achswap.app",
+      "USER_KOUSHIK_PASS",
+      false,
+    ),
+    legacy(
+      "USER_ROLLINS_EMAIL",
+      "rollins@achswap.app",
+      "USER_ROLLINS_PASS",
+      false,
+    ),
   ];
   // Drop entries with no password configured so a missing env var = disabled login.
   return users.filter(
@@ -82,11 +107,14 @@ export function getAllowedSendersForUser(email) {
   const norm = String(email || "")
     .trim()
     .toLowerCase();
-  const users = getUsers().map((u) => u.email);
-  if (!users.includes(norm)) return [];
+  const user = getUsers().find((u) => u.email === norm);
+  if (!user) return [];
   // Shared addresses + own personal address only.
   // Asif can use support/admin/asif@ but never sukanto@/hossain@, etc.
-  const senders = [...DEFAULT_SENDERS];
+  // Support-restricted members (koushik@/rollins@) get admin + personal only.
+  const senders = user.allowSupport === false
+    ? [`admin@${EMAIL_DOMAIN}`]
+    : [...DEFAULT_SENDERS];
   if (!senders.includes(norm)) senders.push(norm);
   return senders;
 }

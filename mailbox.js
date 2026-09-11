@@ -72,6 +72,8 @@ export async function listConversations(db, user, query = {}) {
     !["all", "support", "admin", "personal"].includes(query.inbox)
   )
     throw new MailError(400, "Invalid inbox filter.");
+  if (selected && !addresses.includes(selected))
+    throw new MailError(403, "Mailbox access denied.");
   if (query.view && !["all", "unread", "sent"].includes(query.view))
     throw new MailError(400, "Invalid mail filter.");
   const filters = [`c.inbox_address IN (${marks(addresses)})`];

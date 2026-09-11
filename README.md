@@ -1,6 +1,6 @@
 # AchSwap Mail
 
-A team mailbox with Personal, Support and Admin filters, threaded conversations, search, per-user unread state, a Sent filter, compose and reply. The existing password login is retained. Each member can read/send shared support/admin mail and only their own personal mail; the API applies those rules to every query, send, and retry.
+A team mailbox with Personal, Support and Admin filters, threaded conversations, search, per-user unread state, a Sent filter, compose and reply. The existing password login is retained. Full members can read/send shared support/admin mail and only their own personal mail; admin-only members (koushik@, rollins@) get admin plus their own personal mail with no support access; the API applies those rules to every query, send, and retry.
 
 Incoming mail: **Cloudflare Email Routing → Email Worker → Turso**.
 Outgoing mail: **authenticated app server → saved pending message in Turso → Resend → saved sent status and Message-ID**.
@@ -20,7 +20,7 @@ Copy `.env.example` to `.env`, then set real values:
 - `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`: the **same libSQL-compatible Turso database** as the inbound Worker.
 - `RESEND_API_KEY`: Resend API key for verified `achswap.app` sending. Retrieving actual Message-IDs also requires permission to read sent email metadata; a sending-only key can send but cannot complete that lookup.
 - `AUTH_SECRET`: a strong random session-signing secret. Keep the existing value if existing sessions should remain valid.
-- Existing `USER_ASIF_*`, `USER_HOSSAIN_*`, `USER_SUKANTO_*` variables continue working. Alternatively, `TEAM_USERS_JSON` supplies an arbitrary list of `{ "email": "member@achswap.app", "password": "..." }` objects. When configured it replaces the legacy entries; invalid configuration fails closed.
+- Existing `USER_ASIF_*`, `USER_HOSSAIN_*`, `USER_SUKANTO_*` variables continue working. `USER_KOUSHIK_*` and `USER_ROLLINS_*` are admin-only: admin inbox + their own personal address, no support access (passwords come from `USER_KOUSHIK_PASS` / `USER_ROLLINS_PASS` in `.env` and Vercel env vars). Alternatively, `TEAM_USERS_JSON` supplies an arbitrary list of `{ "email": "member@achswap.app", "password": "..." }` objects; add `"allowSupport": false` to an entry for the same admin-only scope. When configured it replaces the legacy entries; invalid configuration fails closed.
 - `EMAIL_DOMAIN=achswap.app`.
 
 Back up your existing Turso database before the upgrade, then:
@@ -74,7 +74,7 @@ Message text is rendered with textContent. HTML-only mail is converted to text o
 
 Attachment metadata is displayed. Files whose bytes were not retained say **File not retained**. R2 files say **Stored in R2**. This app does not yet expose an R2 download endpoint or attach files to outgoing messages; no public bucket links or object keys are leaked by the API.
 
-Personal addresses are case-insensitive. Unknown personal recipients accepted by catch-all are not visible until a matching team user is configured. Plus aliases are distinct unless you explicitly introduce an alias policy. Shared support/admin access remains available to all configured team members, matching the existing app.
+Personal addresses are case-insensitive. Unknown personal recipients accepted by catch-all are not visible until a matching team user is configured. Plus aliases are distinct unless you explicitly introduce an alias policy. Shared support/admin access remains available to full team members, matching the existing app. Koushik and Rollins are admin-only: they see admin plus their own personal mail, and support queries/sends fail with access denied (the Support filter is hidden for them).
 
 ## Verification and safe preview
 
