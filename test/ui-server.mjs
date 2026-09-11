@@ -66,8 +66,35 @@ await seed(db, "john@achswap.app", "private", "John private note", {
 });
 await seed(db, "support@achswap.app", "html", "An HTML message", {
   text: "",
-  html: '<img src="https://tracker.invalid/pixel"><script>alert(1)</script><p>Hello from HTML.</p>',
+  html: `<html><head><style>
+    body { background:#f4f6f8; margin:0; }
+    .cta { background:#003579; color:#fff; padding:12px 20px; display:inline-block; border-radius:8px; text-decoration:none; }
+    @media only screen and (max-width: 600px) { .wrap { width:100% !important; } }
+  </style></head>
+  <body bgcolor="#f4f6f8">
+    <script>alert(1)</script>
+    <table class="wrap" width="600" align="center" style="background:#ffffff;padding:24px;border-radius:8px">
+      <tr><td>
+        <h1 style="color:#003579;font-size:22px">Hello from HTML.</h1>
+        <p>Read the <a href="https://achswap.app/docs">docs</a> or continue.</p>
+        <p><a class="cta" href="https://achswap.app/start">Get started</a></p>
+        <p><a href="https://achswap.app"><img src="https://cdn.example/logo.png" width="120" height="40" alt="Logo"></a></p>
+        <hr>
+        <p style="color:#656d76;font-size:13px">AchSwap support</p>
+      </td></tr>
+    </table>
+  </body></html>`,
   date: "2026-08-31T09:00:00Z",
+});
+await seed(db, "support@achswap.app", "team", "Team thread", {
+  to: [
+    { address: "support@achswap.app" },
+    { address: "other@example.net" },
+  ],
+  cc: [{ address: "cc@example.net" }],
+  replyTo: [{ address: "jane@example.net" }],
+  text: "Please include everyone on the reply.",
+  date: "2026-08-30T09:00:00Z",
 });
 const { app } = await import("../app.js");
 app.listen(3031, "127.0.0.1", () =>

@@ -13,6 +13,7 @@ const state = {
   threadVersion: 0,
   replyDraft: null,
   composeRequest: null,
+  composePreviewing: false,
 };
 const el = (tag, className, text) => {
   const node = document.createElement(tag);
@@ -106,6 +107,116 @@ function addressText(list) {
     .filter(Boolean)
     .join(", ");
 }
+function editorText(node) {
+  return String(node?.innerText || "").replace(/\u00a0/g, " ").trim();
+}
+function editorHtml(node) {
+  return String(node?.innerHTML || "").trim();
+}
+function editorHasContent(node) {
+  return editorText(node).length > 0;
+}
+function setEditorEmpty(node) {
+  node.classList.toggle("is-empty", !editorHasContent(node));
+}
+function setEditorHtml(node, html) {
+  node.innerHTML = html || "";
+  setEditorEmpty(node);
+}
+function validateAddresses(value, required) {
+  const parsed = window.EmailRender.parseAddressField(value);
+  if (parsed.invalid.length)
+    throw new Error(
+      `Enter valid email addresses (${parsed.invalid.join(", ")}).`,
+    );
+  if (required && !parsed.list.length)
+    throw new Error("Enter at least one recipient.");
+  return parsed.list.join(", ");
+}
+function fillToolbar(toolbar, editor) {
+  toolbar.replaceChildren();
+  const actions = [
+    ["bold", "B", "Bold"],
+    ["italic", "I", "Italic"],
+    ["underline", "U", "Underline"],
+    ["insertUnorderedList", "•", "Bulleted list"],
+    ["insertOrderedList", "1.", "Numbered list"],
+    ["formatBlock:blockquote", "“", "Quote"],
+    ["createLink", "Link", "Insert link"],
+    ["insertImage", "Image", "Insert image"],
+    ["insertHorizontalRule", "—", "Divider"],
+  ];
+  for (const [command, label, title] of actions) {
+    const button = el("button", "", label);
+    button.type = "button";
+    button.title = title;
+    button.setAttribute("aria-label", title);
+    button.addEventListener("mousedown", (event) => event.preventDefault());
+    button.addEventListener("click", () => {
+      editor.focus();
+      if (command === "createLink") {
+        const url = window.prompt("Link URL");
+        const href = window.EmailRender.safeHref(url);
+        if (!href) return;
+        document.execCommand("createLink", false, href);
+        return;
+      }
+      if (command === "insertImage") {
+        const url = window.prompt("Image URL");
+        if (!url || !window.EmailRender.safeResourceUrl(url, "img")) return;
+        const src = window.EmailRender.normalizeUrl(url);
+        document.execCommand(
+          "insertHTML",
+          false,
+          `<img src="${window.EmailRender.escapeHtml(src)}" alt="">`,
+        );
+        return;
+      }
+      if (command.startsWith("formatBlock:")) {
+        document.execCommand("formatBlock", false, command.split(":")[1]);
+        return;
+      }
+      document.execCommand(command, false);
+    });
+    toolbar.append(button);
+  }
+}
+function bindEditor(editor) {
+  setEditorEmpty(editor);
+  editor.addEventListener("input", () => setEditorEmpty(editor));
+  editor.addEventListener("paste", (event) => {
+    const html = event.clipboardData?.getData("text/html");
+    const text = event.clipboardData?.getData("text/plain") || "";
+    event.preventDefault();
+    const safe = html
+      ? window.EmailRender.sanitizeEmailHtml(html)
+      : window.EmailRender.textToHtml(text);
+    document.execCommand("insertHTML", false, safe || window.EmailRender.escapeHtml(text));
+    setEditorEmpty(editor);
+  });
+}
+function bindCopyToggle(button, row, field, onChange) {
+  button.addEventListener("click", () => {
+    const open = row.hidden;
+    row.hidden = !open;
+    button.setAttribute("aria-pressed", String(open));
+    if (open) field.focus();
+    else {
+      field.value = "";
+      onChange?.("");
+    }
+  });
+}
+function showCopyRow(button, row, value) {
+  const has = Boolean(String(value || "").trim());
+  row.hidden = !has;
+  button.setAttribute("aria-pressed", String(has));
+}
+function renderHtml(host, html) {
+  host.classList.add("email-frame");
+  host.replaceChildren();
+  window.EmailRender.renderEmail(host, html);
+}
 function logout() {
   sessionStorage.removeItem("achswap_token");
   state.user = null;
@@ -120,6 +231,7 @@ function logout() {
   $("#conversation-list").replaceChildren();
   $("#reader").replaceChildren();
   $("#compose-form").reset();
+  setEditorHtml($("#compose-body"), "");
   $("#login-form").elements.password.value = "";
 }
 async function enter(user) {
@@ -297,9 +409,7 @@ function readerEmpty() {
   $("#reader").replaceChildren(empty);
 }
 function leaveDraft() {
-  return (
-    !state.replyDraft?.message || window.confirm("Discard your unsent reply?")
-  );
+  return !state.replyDraft?.dirty || window.confirm("Discard your unsent reply?");
 }
 for (const button of document.querySelectorAll("[data-inbox]"))
   button.addEventListener("click", () => {
@@ -414,7 +524,10 @@ function renderThread() {
         [
           message.from_email || "",
           addressText(message.to) ? `To: ${addressText(message.to)}` : "",
-          addressText(message.cc) ? `CC: ${addressText(message.cc)}` : "",
+          addressText(message.cc) ? `Cc: ${addressText(message.cc)}` : "",
+          message.direction === "outbound" && addressText(message.bcc)
+            ? `Bcc: ${addressText(message.bcc)}`
+            : "",
         ]
           .filter(Boolean)
           .join("\n"),
@@ -425,14 +538,16 @@ function renderThread() {
       sender,
       el("time", "", time(message.received_at, true)),
     );
-    card.append(
-      meta,
-      el(
-        "div",
-        "message-body",
-        message.text_body || message.display_text || "(No text content)",
-      ),
+    card.append(meta);
+    const bodyEl = el(
+      "div",
+      `message-body${message.html_body ? " is-html" : ""}`,
     );
+    if (message.html_body) renderHtml(bodyEl, message.html_body);
+    else
+      bodyEl.textContent =
+        message.text_body || message.display_text || "(No text content)";
+    card.append(bodyEl);
     if (message.direction === "outbound")
       card.append(
         el(
@@ -458,19 +573,16 @@ function renderThread() {
     }
     const actions = el("div", "message-actions");
     if (message.delivery_status !== "pending") {
-      const reply = el("button", "text-button");
-      reply.append(icon("reply"), document.createTextNode("Reply"));
-      reply.addEventListener("click", () => {
-        if (!leaveDraft()) return;
-        state.replyDraft = {
-          replyTo: message.id,
-          message: "",
-          requestId: crypto.randomUUID(),
-        };
-        renderReply();
-        $("#reply-body").focus();
-      });
-      actions.append(reply);
+      for (const [mode, name, label] of [
+        ["reply", "reply", "Reply"],
+        ["replyAll", "reply-all", "Reply all"],
+        ["forward", "forward", "Forward"],
+      ]) {
+        const button = el("button", "text-button");
+        button.append(icon(name), document.createTextNode(label));
+        button.addEventListener("click", () => startReply(message, mode));
+        actions.append(button);
+      }
     }
     if (message.can_retry) {
       const retry = el(
@@ -502,6 +614,43 @@ function renderThread() {
   body.append(slot);
   renderReply();
 }
+function quotedBody(message, mode) {
+  const quote =
+    mode === "forward"
+      ? window.EmailRender.buildForwardHtml({
+          ...message,
+          subject: state.thread?.subject || message.subject,
+        })
+      : window.EmailRender.buildQuoteHtml(message);
+  return `<div><br></div>${quote}`;
+}
+function startReply(message, mode) {
+  if (state.replyDraft && !leaveDraft()) return;
+  const recipients = window.EmailRender.replyRecipients(
+    message,
+    state.thread.inbox_address,
+    mode,
+  );
+  state.replyDraft = {
+    replyTo: message.id,
+    mode,
+    to: addressText(recipients.to),
+    cc: addressText(recipients.cc),
+    bcc: "",
+    subject: window.EmailRender.subjectFor(
+      state.thread.subject || message.subject,
+      mode,
+    ),
+    html: quotedBody(message, mode),
+    originalHtml: quotedBody(message, mode),
+    text: "",
+    dirty: false,
+    previewing: false,
+    requestId: crypto.randomUUID(),
+  };
+  renderReply();
+  $("#reply-body")?.focus();
+}
 function renderReply() {
   const slot = $("#reply-slot");
   if (!slot) return;
@@ -518,15 +667,7 @@ function renderReply() {
       el("span", "", "Reply"),
       el("small", "", `from ${state.thread.inbox_address}`),
     );
-    trigger.addEventListener("click", () => {
-      state.replyDraft = {
-        replyTo: target.id,
-        message: "",
-        requestId: crypto.randomUUID(),
-      };
-      renderReply();
-      $("#reply-body")?.focus();
-    });
+    trigger.addEventListener("click", () => startReply(target, "reply"));
     slot.append(trigger);
     return;
   }
@@ -536,62 +677,204 @@ function renderReply() {
     renderReply();
     return;
   }
+  const draft = state.replyDraft;
   const form = el("form", "reply-form");
   const head = el("div", "reply-head");
+  const modeLabel =
+    draft.mode === "forward"
+      ? "Forwarding as "
+      : draft.mode === "replyAll"
+        ? "Reply all as "
+        : "Replying as ";
   head.append(
-    document.createTextNode("Replying as "),
+    document.createTextNode(modeLabel),
     el("strong", "", state.thread.inbox_address),
   );
-  const recipients =
-    target.direction === "outbound"
-      ? target.to
-      : target.reply_to.length
-        ? target.reply_to
-        : [{ address: target.from_email }];
-  head.append(el("div", "message-addresses", `To ${addressText(recipients)}`));
-  const textarea = el("textarea");
-  textarea.id = "reply-body";
-  textarea.placeholder = "Write a reply…";
-  textarea.setAttribute("aria-label", "Reply message");
-  textarea.required = true;
-  textarea.maxLength = 100000;
-  textarea.value = state.replyDraft.message;
-  textarea.disabled = !!state.replyDraft.attempted;
-  textarea.addEventListener(
-    "input",
-    () => (state.replyDraft.message = textarea.value),
-  );
+  const modes = el("div", "reply-mode");
+  for (const [mode, label] of [
+    ["reply", "Reply"],
+    ["replyAll", "Reply all"],
+    ["forward", "Forward"],
+  ]) {
+    const button = el("button", mode === draft.mode ? "active" : "", label);
+    button.type = "button";
+    button.addEventListener("click", () => {
+      if (mode === draft.mode) return;
+      draft.mode = mode;
+      const recipients = window.EmailRender.replyRecipients(
+        target,
+        state.thread.inbox_address,
+        mode,
+      );
+      draft.to = addressText(recipients.to);
+      draft.cc = addressText(recipients.cc);
+      draft.bcc = "";
+      draft.subject = window.EmailRender.subjectFor(
+        state.thread.subject || target.subject,
+        mode,
+      );
+      draft.html = quotedBody(target, mode);
+      draft.originalHtml = draft.html;
+      draft.text = "";
+      draft.dirty = false;
+      draft.previewing = false;
+      renderReply();
+      $("#reply-body")?.focus();
+    });
+    modes.append(button);
+  }
+  const fields = el("div", "reply-fields");
+  const toRow = el("div", "reply-to-row");
+  const toLabel = el("label", "", "To");
+  const toInput = el("input");
+  toInput.id = "reply-to";
+  toInput.value = draft.to;
+  toInput.placeholder = "name@example.com";
+  toInput.autocomplete = "off";
+  toInput.required = true;
+  toInput.addEventListener("input", () => {
+    draft.to = toInput.value;
+    draft.dirty = true;
+  });
+  toLabel.append(toInput);
+  const copyToggles = el("div", "compose-copy-toggles");
+  const ccToggle = el("button", "ghost-toggle", "Cc");
+  const bccToggle = el("button", "ghost-toggle", "Bcc");
+  ccToggle.type = "button";
+  bccToggle.type = "button";
+  copyToggles.append(ccToggle, bccToggle);
+  toRow.append(toLabel, copyToggles);
+  const ccRow = el("label");
+  ccRow.id = "reply-cc-row";
+  ccRow.append(document.createTextNode("Cc"));
+  const ccInput = el("input");
+  ccInput.id = "reply-cc";
+  ccInput.value = draft.cc;
+  ccInput.placeholder = "Separate addresses with commas";
+  ccInput.autocomplete = "off";
+  ccInput.addEventListener("input", () => {
+    draft.cc = ccInput.value;
+    draft.dirty = true;
+  });
+  ccRow.append(ccInput);
+  const bccRow = el("label");
+  bccRow.id = "reply-bcc-row";
+  bccRow.append(document.createTextNode("Bcc"));
+  const bccInput = el("input");
+  bccInput.id = "reply-bcc";
+  bccInput.value = draft.bcc;
+  bccInput.placeholder = "Separate addresses with commas";
+  bccInput.autocomplete = "off";
+  bccInput.addEventListener("input", () => {
+    draft.bcc = bccInput.value;
+    draft.dirty = true;
+  });
+  bccRow.append(bccInput);
+  const subjectLabel = el("label", "", "Subject");
+  const subjectInput = el("input");
+  subjectInput.id = "reply-subject";
+  subjectInput.value = draft.subject;
+  subjectInput.maxLength = 998;
+  subjectInput.addEventListener("input", () => {
+    draft.subject = subjectInput.value;
+    draft.dirty = true;
+  });
+  subjectLabel.append(subjectInput);
+  fields.append(toRow, ccRow, bccRow, subjectLabel);
+  bindCopyToggle(ccToggle, ccRow, ccInput, (value) => {
+    draft.cc = value;
+    draft.dirty = true;
+  });
+  bindCopyToggle(bccToggle, bccRow, bccInput, (value) => {
+    draft.bcc = value;
+    draft.dirty = true;
+  });
+  showCopyRow(ccToggle, ccRow, draft.cc);
+  showCopyRow(bccToggle, bccRow, draft.bcc);
+  const toolbar = el("div", "editor-toolbar");
+  const editor = el("div", "editor-area");
+  editor.id = "reply-body";
+  editor.contentEditable = "true";
+  editor.setAttribute("role", "textbox");
+  editor.setAttribute("aria-multiline", "true");
+  editor.setAttribute("aria-label", "Reply message");
+  editor.dataset.placeholder = "Write a reply…";
+  setEditorHtml(editor, draft.html);
+  editor.addEventListener("input", () => {
+    draft.html = editorHtml(editor);
+    draft.text = editorText(editor);
+    draft.dirty = true;
+  });
+  bindEditor(editor);
+  fillToolbar(toolbar, editor);
+  const preview = el("div", "message-body is-html reply-preview");
+  preview.id = "reply-preview";
+  preview.hidden = !draft.previewing;
+  editor.hidden = !!draft.previewing;
+  toolbar.hidden = !!draft.previewing;
+  if (draft.previewing) renderHtml(preview, draft.html);
   const error = el("p", "error");
   error.setAttribute("role", "alert");
   const footer = el("div", "reply-footer");
   const cancel = el("button", "cancel-reply", "Discard");
   cancel.type = "button";
   cancel.addEventListener("click", () => {
-    if (state.replyDraft.message && !window.confirm("Discard this reply?"))
-      return;
+    if (draft.dirty && !window.confirm("Discard this reply?")) return;
     state.replyDraft = null;
+    renderReply();
+  });
+  const previewToggle = el(
+    "button",
+    "text-button",
+    draft.previewing ? "Edit" : "Preview",
+  );
+  previewToggle.type = "button";
+  previewToggle.addEventListener("click", () => {
+    draft.html = editorHtml(editor);
+    draft.text = editorText(editor);
+    draft.to = toInput.value;
+    draft.cc = ccInput.value;
+    draft.bcc = bccInput.value;
+    draft.subject = subjectInput.value;
+    draft.previewing = !draft.previewing;
     renderReply();
   });
   const send = el(
     "button",
     "primary",
-    state.replyDraft.attempted ? "Retry same reply ↗" : "Send reply ↗",
+    draft.attempted ? "Retry same reply ↗" : "Send reply ↗",
   );
   send.type = "submit";
-  footer.append(cancel, send);
-  form.append(head, textarea, error, footer);
+  footer.append(cancel, previewToggle, send);
+  form.append(head, modes, fields, toolbar, editor, preview, error, footer);
   slot.append(form);
+  form.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && event.target.tagName === "INPUT")
+      event.preventDefault();
+  });
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const draft = state.replyDraft;
     send.disabled = true;
-    textarea.disabled = true;
+    editor.contentEditable = "false";
     draft.attempted = true;
     error.textContent = "";
     try {
+      const to = validateAddresses(toInput.value, true);
+      const cc = validateAddresses(ccInput.value, false);
+      const bcc = validateAddresses(bccInput.value, false);
+      const html = window.EmailRender.sanitizeEmailHtml(editorHtml(editor));
+      const message = editorText(editor);
+      if (!message && !html)
+        throw new Error("Write a message of up to 100 KB.");
       const result = await api("send", {
         replyTo: draft.replyTo,
-        message: draft.message,
+        mode: draft.mode,
+        to,
+        cc,
+        bcc,
+        subject: subjectInput.value,
+        message,
+        html,
         requestId: draft.requestId,
       });
       state.replyDraft = null;
@@ -603,10 +886,10 @@ function renderReply() {
       );
     } catch (e) {
       error.textContent = e.message;
-      if (e.status === 400) {
+      if (e.status === 400 || !e.status) {
         draft.attempted = false;
         draft.requestId = crypto.randomUUID();
-        textarea.disabled = false;
+        editor.contentEditable = "true";
         send.textContent = "Send reply ↗";
       } else {
         send.textContent = "Retry same reply ↗";
@@ -616,9 +899,27 @@ function renderReply() {
     }
   });
 }
+function resetComposer() {
+  $("#compose-form").reset();
+  setEditorHtml($("#compose-body"), "");
+  $("#compose-cc-row").hidden = true;
+  $("#compose-bcc-row").hidden = true;
+  $("#toggle-cc").setAttribute("aria-pressed", "false");
+  $("#toggle-bcc").setAttribute("aria-pressed", "false");
+  $("#compose-preview").hidden = true;
+  $("#compose-body").hidden = false;
+  $("#compose-toolbar").hidden = false;
+  $("#compose-preview-toggle").textContent = "Preview";
+  $("#compose-error").textContent = "";
+  $("#compose-form button[type=submit]").textContent = "Send message";
+  $("#compose-form")
+    .querySelectorAll("input,select")
+    .forEach((node) => (node.disabled = false));
+  state.composePreviewing = false;
+}
 $("#compose").addEventListener("click", () => {
   if (!state.composeRequest) {
-    $("#compose-form").reset();
+    resetComposer();
     $("#compose-from").value =
       state.inbox === "support" || state.inbox === "admin"
         ? `${state.inbox}@${state.user.email.split("@")[1]}`
@@ -626,10 +927,11 @@ $("#compose").addEventListener("click", () => {
     state.composeRequest = { requestId: crypto.randomUUID() };
   }
   $("#composer").showModal();
+  $("#compose-to").focus();
 });
 function closeCompose() {
   if (
-    $("#compose-body").value &&
+    (editorHasContent($("#compose-body")) || state.composeRequest?.payload) &&
     !window.confirm(
       state.composeRequest?.payload
         ? "This send may already be saved. Close and check the conversation list?"
@@ -638,12 +940,7 @@ function closeCompose() {
   )
     return;
   state.composeRequest = null;
-  $("#compose-form").reset();
-  $("#compose-form")
-    .querySelectorAll("input,textarea,select")
-    .forEach((n) => (n.disabled = false));
-  $("#compose-error").textContent = "";
-  $("#compose-form button[type=submit]").textContent = "Send message ↗";
+  resetComposer();
   $("#composer").close();
   refreshList();
 }
@@ -652,6 +949,27 @@ $("#composer").addEventListener("cancel", (e) => {
   e.preventDefault();
   closeCompose();
 });
+bindCopyToggle($("#toggle-cc"), $("#compose-cc-row"), $("#compose-cc"));
+bindCopyToggle($("#toggle-bcc"), $("#compose-bcc-row"), $("#compose-bcc"));
+fillToolbar($("#compose-toolbar"), $("#compose-body"));
+bindEditor($("#compose-body"));
+$("#compose-preview-toggle").addEventListener("click", () => {
+  state.composePreviewing = !state.composePreviewing;
+  const previewing = state.composePreviewing;
+  $("#compose-body").hidden = previewing;
+  $("#compose-toolbar").hidden = previewing;
+  $("#compose-preview").hidden = !previewing;
+  $("#compose-preview-toggle").textContent = previewing ? "Edit" : "Preview";
+  if (previewing)
+    renderHtml(
+      $("#compose-preview"),
+      window.EmailRender.sanitizeEmailHtml(editorHtml($("#compose-body"))),
+    );
+});
+$("#compose-form").addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && event.target.tagName === "INPUT")
+    event.preventDefault();
+});
 $("#compose-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.currentTarget,
@@ -659,38 +977,44 @@ $("#compose-form").addEventListener("submit", async (event) => {
   button.disabled = true;
   $("#compose-error").textContent = "";
   const request = state.composeRequest;
-  if (!request.payload)
-    request.payload = {
-      requestId: request.requestId,
-      from: $("#compose-from").value,
-      to: $("#compose-to").value,
-      cc: $("#compose-cc").value,
-      subject: $("#compose-subject").value,
-      message: $("#compose-body").value,
-    };
-  form
-    .querySelectorAll("input,textarea,select")
-    .forEach((n) => (n.disabled = true));
   try {
+    if (!request.payload) {
+      const to = validateAddresses($("#compose-to").value, true);
+      const cc = validateAddresses($("#compose-cc").value, false);
+      const bcc = validateAddresses($("#compose-bcc").value, false);
+      const html = window.EmailRender.sanitizeEmailHtml(
+        editorHtml($("#compose-body")),
+      );
+      const message = editorText($("#compose-body"));
+      if (!message && !html)
+        throw new Error("Write a message of up to 100 KB.");
+      request.payload = {
+        requestId: request.requestId,
+        from: $("#compose-from").value,
+        to,
+        cc,
+        bcc,
+        subject: $("#compose-subject").value,
+        message,
+        html,
+      };
+    }
+    form.querySelectorAll("input,select").forEach((node) => (node.disabled = true));
     const result = await api("send", request.payload);
     state.composeRequest = null;
-    form.reset();
-    form
-      .querySelectorAll("input,textarea,select")
-      .forEach((n) => (n.disabled = false));
+    resetComposer();
     $("#composer").close();
     await refreshList();
     await openThread(result.conversationId);
     notify("Message sent and saved.");
-    button.textContent = "Send message ↗";
   } catch (error) {
     $("#compose-error").textContent = error.message;
-    if (error.status === 400) {
+    if (error.status === 400 || !error.status) {
       state.composeRequest = { requestId: crypto.randomUUID() };
       form
-        .querySelectorAll("input,textarea,select")
-        .forEach((n) => (n.disabled = false));
-      button.textContent = "Send message ↗";
+        .querySelectorAll("input,select")
+        .forEach((node) => (node.disabled = false));
+      button.textContent = "Send message";
     } else {
       button.textContent = "Retry same message ↗";
     }
@@ -699,7 +1023,7 @@ $("#compose-form").addEventListener("submit", async (event) => {
   }
 });
 window.addEventListener("beforeunload", (event) => {
-  if (state.replyDraft?.message || $("#compose-body").value) {
+  if (state.replyDraft?.dirty || editorHasContent($("#compose-body"))) {
     event.preventDefault();
     event.returnValue = "";
   }

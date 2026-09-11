@@ -10,13 +10,31 @@ import {
   addressList,
   conversation,
 } from "./mailbox.js";
+import {
+  sanitizeEmailHtml,
+  textToHtml,
+  htmlToPlainText,
+  replyRecipients,
+  subjectFor,
+} from "./email-html.js";
 
 export async function prepareSend(db, user, input) {
   const senders = allowed(user);
   if (!/^[a-zA-Z0-9_-]{16,100}$/.test(input.requestId || ""))
     throw new MailError(400, "A valid send request ID is required.");
   const body = String(input.message || "");
-  if (!body.trim() || Buffer.byteLength(body) > 100000)
+  const htmlInput = input.html == null ? "" : String(input.html);
+  if (Buffer.byteLength(body) > 100000)
+    throw new MailError(400, "Write a message of up to 100 KB.");
+  if (Buffer.byteLength(htmlInput) > 200000)
+    throw new MailError(400, "HTML message is too large.");
+  const html = htmlInput.trim()
+    ? sanitizeEmailHtml(htmlInput)
+    : body.trim()
+      ? textToHtml(body)
+      : "";
+  const text = body.trim() || htmlToPlainText(html);
+  if (!text.trim() && !html.trim())
     throw new MailError(400, "Write a message of up to 100 KB.");
   const signature = crypto
     .createHash("sha256")
@@ -26,8 +44,11 @@ export async function prepareSend(db, user, input) {
         from: input.from || null,
         to: input.to || null,
         cc: input.cc || null,
+        bcc: input.bcc || null,
         subject: input.subject || null,
         message: body,
+        html: htmlInput,
+        mode: input.mode || null,
       }),
     )
     .digest("hex");
@@ -55,7 +76,13 @@ export async function prepareSend(db, user, input) {
       from,
       to,
       subject,
-      cc = [];
+      cc = [],
+      bcc = [];
+    const mode = ["reply", "replyAll", "forward"].includes(input.mode)
+      ? input.mode
+      : input.replyTo
+        ? "reply"
+        : "compose";
     if (input.replyTo) {
       parent = (
         await tx.execute({
@@ -76,23 +103,23 @@ export async function prepareSend(db, user, input) {
           403,
           "Replies must use this conversation’s inbox address.",
         );
-      if (input.to || input.cc)
-        throw new MailError(
-          400,
-          "Reply recipients are determined by the original message.",
-        );
-      const targets =
-        parent.direction === "outbound"
-          ? parse(parent.to_header)
-          : parse(parent.reply_to).length
-            ? parse(parent.reply_to)
-            : [{ address: parent.from_email }];
-      to = addressList(
-        targets.flatMap((a) => a.group || [a]).map((a) => a.address || ""),
+      const defaults = replyRecipients(
+        {
+          ...parent,
+          to: parse(parent.to_header),
+          cc: parse(parent.cc),
+          reply_to: parse(parent.reply_to),
+        },
+        from,
+        mode,
       );
-      subject = /^re:/i.test(parent.subject)
-        ? parent.subject
-        : `Re: ${parent.subject}`;
+      to = input.to != null ? addressList(input.to) : defaults.to;
+      cc = input.cc != null ? addressList(input.cc) : defaults.cc;
+      bcc = addressList(input.bcc || []);
+      subject =
+        mode === "forward"
+          ? String(input.subject || subjectFor(parent.subject, "forward")).trim()
+          : subjectFor(parent.subject, "reply");
     } else {
       from = String(input.from || "")
         .trim()
@@ -101,6 +128,7 @@ export async function prepareSend(db, user, input) {
         throw new MailError(403, "You cannot send from that inbox.");
       to = addressList(input.to);
       cc = addressList(input.cc || []);
+      bcc = addressList(input.bcc || []);
       subject = String(input.subject || "").trim();
     }
     if (!to.length)
@@ -133,8 +161,8 @@ export async function prepareSend(db, user, input) {
       .join(" ");
     await tx.execute({
       sql: `INSERT INTO messages (id,conversation_id,inbox_address,dedupe_key,direction,from_email,from_name,envelope_from,
-      to_email,to_header,cc,subject,text_body,received_at,created_at,in_reply_to,"references",delivery_status,created_by,idempotency_key,request_hash)
-      VALUES (${Array(21).fill("?").join(",")})`,
+      to_email,to_header,cc,bcc,subject,text_body,html_body,received_at,created_at,in_reply_to,"references",delivery_status,created_by,idempotency_key,request_hash)
+      VALUES (${Array(23).fill("?").join(",")})`,
       args: [
         id,
         thread.id,
@@ -147,8 +175,10 @@ export async function prepareSend(db, user, input) {
         to[0].address,
         JSON.stringify(to),
         JSON.stringify(cc),
+        JSON.stringify(bcc),
         subject,
-        body,
+        text,
+        html || null,
         now,
         now,
         parent?.message_id || null,

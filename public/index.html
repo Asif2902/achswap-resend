@@ -22,6 +22,7 @@
       crossorigin
     />
     <link rel="stylesheet" href="/mail.css" />
+    <script src="/email-render.js" defer></script>
     <script src="/mail.js" defer></script>
   </head>
   <body>
@@ -216,17 +217,44 @@
         </header>
         <div class="compose-fields">
           <label>From<select id="compose-from" required></select></label>
-          <label
-            >To<input
-              id="compose-to"
-              required
-              placeholder="name@example.com"
-              autocomplete="off"
-          /></label>
-          <label
-            ><span>CC <span class="muted">(optional)</span></span
+          <div class="compose-to-row">
+            <label
+              >To<input
+                id="compose-to"
+                required
+                placeholder="name@example.com, other@example.com"
+                autocomplete="off"
+            /></label>
+            <div class="compose-copy-toggles">
+              <button
+                type="button"
+                id="toggle-cc"
+                class="ghost-toggle"
+                aria-pressed="false"
+              >
+                Cc
+              </button>
+              <button
+                type="button"
+                id="toggle-bcc"
+                class="ghost-toggle"
+                aria-pressed="false"
+              >
+                Bcc
+              </button>
+            </div>
+          </div>
+          <label id="compose-cc-row" hidden
+            ><span>Cc</span
             ><input
               id="compose-cc"
+              placeholder="Separate addresses with commas"
+              autocomplete="off"
+          /></label>
+          <label id="compose-bcc-row" hidden
+            ><span>Bcc</span
+            ><input
+              id="compose-bcc"
               placeholder="Separate addresses with commas"
               autocomplete="off"
           /></label>
@@ -238,15 +266,26 @@
               placeholder="Add a subject"
           /></label>
         </div>
-        <label class="sr-only" for="compose-body">Message</label>
-        <textarea
+        <div class="editor-toolbar" id="compose-toolbar"></div>
+        <div
           id="compose-body"
-          required
-          maxlength="100000"
-          placeholder="Write your message…"
-        ></textarea>
+          class="editor-area is-empty"
+          contenteditable="true"
+          role="textbox"
+          aria-multiline="true"
+          aria-label="Message"
+          data-placeholder="Write your message…"
+        ></div>
+        <div
+          id="compose-preview"
+          class="message-body is-html compose-preview"
+          hidden
+        ></div>
         <p id="compose-error" class="error" role="alert"></p>
         <footer>
+          <button type="button" id="compose-preview-toggle" class="text-button">
+            Preview
+          </button>
           <button class="primary" type="submit">
             Send message
             <svg class="icon" aria-hidden="true">

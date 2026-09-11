@@ -6,16 +6,18 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test test/mailbox.test.js",
+    "test": "node --test test/mailbox.test.js test/email-html.test.js",
     "test:ui": "playwright test",
     "migrate": "node scripts/migrate.mjs",
-    "check": "node --check public/mail.js"
+    "check": "node --check public/mail.js && node --check public/email-render.js && node --check email-html.js"
   },
   "dependencies": {
     "@libsql/client": "^0.18.0",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
-    "html-to-text": "^10.0.1"
+    "dom-serializer": "^2.0.0",
+    "html-to-text": "^10.0.1",
+    "htmlparser2": "^10.0.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",

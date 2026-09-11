@@ -1,5 +1,6 @@
 import { EMAIL_DOMAIN, getAllowedSendersForUser } from "./auth.js";
 import { convert } from "html-to-text";
+import { sanitizeEmailHtml, stripPreview } from "./email-html.js";
 export class MailError extends Error {
   constructor(status, message) {
     super(message);
@@ -24,7 +25,9 @@ export function allowed(user) {
   return addresses;
 }
 export function addressList(value) {
-  const values = Array.isArray(value) ? value : String(value || "").split(",");
+  const values = Array.isArray(value)
+    ? value
+    : String(value || "").split(/[,;]/);
   const result = [
     ...new Set(
       values.map((v) => String(v).trim().toLowerCase()).filter(Boolean),
@@ -114,7 +117,7 @@ export async function listConversations(db, user, query = {}) {
   }
   const rows = (
     await db.execute({
-      sql: `SELECT c.*, m.from_email, m.from_name, substr(m.text_body,1,180) AS preview,
+      sql: `SELECT c.*, m.from_email, m.from_name, substr(coalesce(nullif(m.text_body,''), m.html_body),1,400) AS preview,
     (SELECT count(*) FROM messages n WHERE n.conversation_id=c.id) AS message_count,
     (SELECT count(*) FROM messages n WHERE n.conversation_id=c.id AND n.direction='inbound' AND NOT EXISTS
       (SELECT 1 FROM message_reads r WHERE r.message_fk=n.id AND r.user_email=?)) AS unread_count
@@ -123,7 +126,10 @@ export async function listConversations(db, user, query = {}) {
       args: [user.email, ...args],
     })
   ).rows;
-  const items = rows.slice(0, 30);
+  const items = rows.slice(0, 30).map((row) => ({
+    ...row,
+    preview: stripPreview(row.preview),
+  }));
   const counts = (
     await db.execute({
       sql: `SELECT m.inbox_address, count(*) AS unread FROM messages m WHERE m.inbox_address IN (${marks(addresses)})
@@ -176,36 +182,43 @@ export async function getConversation(db, user, id, before) {
     : [];
   return {
     conversation: thread,
-    messages: page.map((row) => ({
-      id: row.id,
-      conversation_id: row.conversation_id,
-      direction: row.direction,
-      from_email: row.from_email,
-      from_name: row.from_name,
-      to: parse(row.to_header),
-      cc: parse(row.cc),
-      reply_to: parse(row.reply_to),
-      subject: row.subject,
-      text_body: row.text_body,
-      display_text:
+    messages: page.map((row) => {
+      const html = row.html_body ? sanitizeEmailHtml(row.html_body) : "";
+      const displayText =
         row.text_body ||
         convert(String(row.html_body || ""), {
           wordwrap: false,
           selectors: [
             { selector: "img", format: "skip" },
+            { selector: "style", format: "skip" },
             { selector: "a", options: { ignoreHref: true } },
           ],
-        }),
-      received_at: row.received_at,
-      delivery_status: row.delivery_status,
-      message_id: row.message_id,
-      created_by: row.created_by,
-      can_retry:
-        row.direction === "outbound" &&
-        row.created_by === user.email &&
-        (row.delivery_status !== "sent" || !row.message_id),
-      attachments: attachments.filter((a) => a.message_fk === row.id),
-    })),
+        });
+      return {
+        id: row.id,
+        conversation_id: row.conversation_id,
+        direction: row.direction,
+        from_email: row.from_email,
+        from_name: row.from_name,
+        to: parse(row.to_header),
+        cc: parse(row.cc),
+        bcc: parse(row.bcc),
+        reply_to: parse(row.reply_to),
+        subject: row.subject,
+        text_body: row.text_body,
+        html_body: html || undefined,
+        display_text: displayText,
+        received_at: row.received_at,
+        delivery_status: row.delivery_status,
+        message_id: row.message_id,
+        created_by: row.created_by,
+        can_retry:
+          row.direction === "outbound" &&
+          row.created_by === user.email &&
+          (row.delivery_status !== "sent" || !row.message_id),
+        attachments: attachments.filter((a) => a.message_fk === row.id),
+      };
+    }),
     olderCursor: rows.length > 50 ? page[0].id : null,
   };
 }

@@ -32,6 +32,33 @@ export async function migrate(db) {
       ),
     );
   }
+  const after = (await db.execute("PRAGMA table_info(messages)")).rows.map(
+    (r) => r.name,
+  );
+  const bccInstalled =
+    (
+      await db.execute(
+        "SELECT name FROM sqlite_master WHERE name='schema_migrations'",
+      )
+    ).rows.length &&
+    (
+      await db.execute(
+        "SELECT version FROM schema_migrations WHERE version='0003_bcc'",
+      )
+    ).rows.length;
+  if (!bccInstalled) {
+    if (after.includes("bcc"))
+      await db.execute(
+        "INSERT INTO schema_migrations VALUES ('0003_bcc', strftime('%Y-%m-%dT%H:%M:%fZ','now'))",
+      );
+    else
+      await db.executeMultiple(
+        await readFile(
+          new URL("../migrations/0003_bcc.sql", import.meta.url),
+          "utf8",
+        ),
+      );
+  }
   if ((await db.execute("PRAGMA foreign_key_check")).rows.length)
     throw new Error("Foreign key check failed");
 }

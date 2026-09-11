@@ -5,6 +5,7 @@ import { createClient } from "@libsql/client";
 import { migrate } from "../scripts/migrate.mjs";
 import { listConversations, getConversation, markRead } from "../mailbox.js";
 import { prepareSend, deliver } from "../outbound.js";
+import { buildSendPayload } from "../provider.js";
 import {
   getAllowedSendersForUser,
   verifyCredentials,
@@ -244,15 +245,18 @@ test("late provider ID merges an already arrived reply without losing messages",
     2,
   );
 });
-test("HTML-only mail returns safe text without executable HTML or remote resources", async () => {
+test("HTML-only mail returns sanitized HTML that keeps images and drops scripts", async () => {
   await seed(db, asif.email, "html", "Hello", {
     text: "",
-    html: '<script>alert(1)</script><p>Safe text</p><img src="https://tracker.example/open"><a href="javascript:alert(1)">link</a>',
+    html: '<script>alert(1)</script><p>Safe text</p><img src="https://tracker.example/open"><a href="javascript:alert(1)">link</a><a href="https://achswap.app" style="display:inline-block;background:#003579;color:#fff;padding:12px 20px">Go</a>',
   });
   const message = (await getConversation(db, asif, "html")).messages[0];
-  assert.equal(message.html_body, undefined);
+  assert.match(message.html_body, /Safe text/);
+  assert.match(message.html_body, /https:\/\/tracker\.example\/open/);
+  assert.match(message.html_body, /data-email-role="button"/);
+  assert.doesNotMatch(message.html_body, /<script/i);
+  assert.doesNotMatch(message.html_body, /javascript:/i);
   assert.match(message.display_text, /Safe text/);
-  assert.doesNotMatch(message.display_text, /script|tracker|javascript/);
 });
 test("migration preserves existing inbound rows, attachment references, and is rerunnable", async () => {
   const legacy = createClient({ url: ":memory:" });
@@ -286,6 +290,86 @@ test("migration preserves existing inbound rows, attachment references, and is r
     legacy.close();
   }
 });
+test("invalid CC is rejected before send", async () => {
+  await assert.rejects(
+    prepareSend(db, asif, input({ cc: "not-an-email" })),
+    { status: 400 },
+  );
+  await assert.rejects(
+    prepareSend(db, asif, input({ bcc: "also bad" })),
+    { status: 400 },
+  );
+});
+test("compose stores CC/BCC/HTML and the provider payload includes them", async () => {
+  const row = await prepareSend(
+    db,
+    asif,
+    input({
+      cc: "cc@example.net, other@example.net",
+      bcc: "secret@example.net",
+      html: '<p>Hi <a href="https://achswap.app" style="display:inline-block;background:#003579;color:#fff;padding:12px 20px">Go</a></p>',
+      message: "Hi",
+    }),
+  );
+  assert.equal(JSON.parse(row.cc).length, 2);
+  assert.equal(JSON.parse(row.bcc)[0].address, "secret@example.net");
+  assert.match(row.html_body, /data-email-role="button"/);
+  const payload = buildSendPayload(row);
+  assert.deepEqual(payload.cc, ["cc@example.net", "other@example.net"]);
+  assert.deepEqual(payload.bcc, ["secret@example.net"]);
+  assert.match(payload.html, /Go/);
+});
+
+test("reply all and forward accept client recipients and stay in the thread", async () => {
+  await seed(db, "support@achswap.app", "thread", "A question", {
+    to: [
+      { address: "support@achswap.app" },
+      { address: "other@example.net" },
+    ],
+    cc: [{ address: "cc@example.net" }],
+    replyTo: [{ address: "reply@example.net" }],
+  });
+  const replyAll = await prepareSend(db, asif, {
+    requestId: crypto.randomUUID(),
+    replyTo: "m-thread",
+    mode: "replyAll",
+    message: "All of you.",
+  });
+  assert.equal(replyAll.from_email, "support@achswap.app");
+  assert.equal(replyAll.conversation_id, "thread");
+  assert.deepEqual(JSON.parse(replyAll.to_header).map((a) => a.address), [
+    "reply@example.net",
+    "other@example.net",
+  ]);
+  assert.deepEqual(JSON.parse(replyAll.cc).map((a) => a.address), [
+    "cc@example.net",
+  ]);
+  const forwarded = await prepareSend(db, asif, {
+    requestId: crypto.randomUUID(),
+    replyTo: "m-thread",
+    mode: "forward",
+    to: "new@example.net",
+    cc: "fwd-cc@example.net",
+    bcc: "fwd-bcc@example.net",
+    message: "Please see below.",
+  });
+  assert.equal(forwarded.conversation_id, "thread");
+  assert.match(forwarded.subject, /^Fwd:/);
+  assert.equal(JSON.parse(forwarded.to_header)[0].address, "new@example.net");
+  assert.equal(JSON.parse(forwarded.cc)[0].address, "fwd-cc@example.net");
+  assert.equal(JSON.parse(forwarded.bcc)[0].address, "fwd-bcc@example.net");
+  const edited = await prepareSend(db, asif, {
+    requestId: crypto.randomUUID(),
+    replyTo: "m-thread",
+    mode: "reply",
+    to: "custom@example.net",
+    cc: "extra@example.net",
+    message: "Redirected.",
+  });
+  assert.equal(JSON.parse(edited.to_header)[0].address, "custom@example.net");
+  assert.equal(JSON.parse(edited.cc)[0].address, "extra@example.net");
+});
+
 test("pagination and literal search work without SQL interpolation", async () => {
   for (let i = 0; i < 32; i++)
     await seed(

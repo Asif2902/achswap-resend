@@ -523,9 +523,11 @@ p {
 .reader {
   flex: 1;
   min-width: 0;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
+  scrollbar-gutter: stable;
   background: var(--achswap-bg);
 }
 .reader:focus {
@@ -573,6 +575,8 @@ p {
   border-bottom: 1px solid var(--line);
   background: var(--surface);
   overflow-wrap: anywhere;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 .reader-head h2 {
   font-size: 1.5rem;
@@ -595,9 +599,24 @@ p {
   display: none;
 }
 .thread-body {
+  width: 100%;
   max-width: 900px;
   padding: 28px 36px 48px;
   margin-inline: auto;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  box-sizing: border-box;
+  overflow-x: hidden;
+}
+.message-card,
+.reply-form {
+  min-width: 0;
+  max-width: 100%;
+}
+.reply-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
 }
 .message-card {
   padding: 28px 0;
@@ -642,6 +661,24 @@ p {
   line-height: 1.8;
   color: var(--text);
   margin: 24px 0 14px 48px;
+}
+.message-body.is-html {
+  white-space: normal;
+  background: #ffffff;
+  color: #1f2328;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px;
+  margin-top: 20px;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.email-frame {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
 }
 .message-status {
   font-size: 0.75rem;
@@ -721,7 +758,8 @@ p {
 .reply-head .message-addresses {
   margin-top: 4px;
 }
-.reply-form textarea {
+.reply-form textarea,
+.reply-form .editor-area {
   border: 0;
   border-radius: 0;
   display: block;
@@ -733,11 +771,65 @@ p {
   padding: 18px;
   outline-offset: -3px;
 }
+.reply-fields {
+  padding: 0 18px;
+}
+.reply-fields label {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.8125rem;
+}
+.reply-fields input {
+  border: 0;
+  padding: 8px 4px;
+  background: transparent;
+  font-size: 0.875rem;
+}
+.reply-to-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.reply-to-row label {
+  flex: 1;
+  border-bottom: 0;
+}
+.reply-mode {
+  display: flex;
+  gap: 4px;
+  padding: 10px 18px 0;
+}
+.reply-mode button {
+  min-height: 36px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+.reply-mode button.active {
+  background: var(--selected);
+  color: var(--accent);
+}
+.reply-preview {
+  margin: 0;
+  border-radius: 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
 .reply-footer {
   padding: 12px 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
   border-top: 1px solid var(--line);
 }
@@ -809,7 +901,7 @@ p {
 }
 dialog {
   background: var(--surface);
-  width: min(640px, calc(100vw - 40px));
+  width: min(720px, calc(100vw - 40px));
   max-height: calc(100dvh - 48px);
   border: 1px solid var(--line);
   border-radius: 14px;
@@ -836,6 +928,105 @@ dialog::backdrop {
 }
 .compose-fields {
   padding: 4px 24px;
+}
+.compose-to-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.compose-to-row label {
+  flex: 1;
+  border-bottom: 0;
+}
+.compose-copy-toggles {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+  padding-right: 2px;
+}
+.ghost-toggle {
+  min-height: 36px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  color: var(--accent);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+.ghost-toggle:hover,
+.ghost-toggle[aria-pressed="true"] {
+  background: var(--hover);
+}
+.editor-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--achswap-bg);
+  min-width: 0;
+  max-width: 100%;
+}
+.editor-toolbar button {
+  min-height: 36px;
+  min-width: 36px;
+  padding: 6px 9px;
+  border-radius: 6px;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+.editor-toolbar button:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.editor-area {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 220px;
+  padding: 22px 28px;
+  overflow: auto;
+  background: #ffffff;
+  color: #1f2328;
+  font-size: 1rem;
+  line-height: 1.7;
+  outline: none;
+}
+.editor-area.is-empty::before {
+  content: attr(data-placeholder);
+  color: #656d76;
+  pointer-events: none;
+}
+.editor-area a[data-email-role="button"],
+.editor-area a[style*="padding"] {
+  text-decoration: none;
+}
+.editor-area img {
+  max-width: 100% !important;
+  height: auto;
+}
+.editor-area table {
+  max-width: 100% !important;
+}
+.editor-area .email-quote,
+.editor-area .email-forward,
+.editor-area blockquote {
+  margin-top: 16px;
+  padding-left: 12px;
+  border-left: 2px solid #d0d7de;
+  color: #656d76;
+}
+.compose-preview {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  min-height: 220px;
+}
+.field-invalid {
+  box-shadow: inset 0 0 0 1px #ff9595;
 }
 dialog label {
   margin: 0;
@@ -876,7 +1067,9 @@ dialog .error {
 }
 dialog footer {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
   padding: 16px 24px;
   border-top: 1px solid var(--line);
   background: var(--surface);
@@ -1133,7 +1326,8 @@ dialog footer {
     flex-basis: 100%;
     margin-left: 30px;
   }
-  .reply-form textarea {
+  .reply-form textarea,
+  .reply-form .editor-area {
     min-height: 160px;
   }
   /* Reclaim vertical space for the conversation and the on-screen keyboard. */
@@ -1174,7 +1368,8 @@ dialog footer {
   dialog select {
     font-size: 1rem;
   }
-  dialog textarea {
+  dialog textarea,
+  dialog .editor-area {
     flex: 1;
     min-height: 160px;
     padding: 20px 18px;
@@ -1183,7 +1378,8 @@ dialog footer {
     padding: 12px 18px max(12px, env(safe-area-inset-bottom));
   }
   dialog footer .primary {
-    width: 100%;
+    width: auto;
+    min-width: 140px;
   }
   .login-card {
     padding: 30px 24px;
