@@ -662,13 +662,13 @@ p {
   color: var(--text);
   margin: 24px 0 14px 48px;
 }
-.message-body.is-html {
+.message-body.is-html.is-designed {
   white-space: normal;
-  background: #ffffff;
-  color: #1f2328;
+  background: transparent;
+  color: inherit;
   border: 1px solid var(--line);
   border-radius: 10px;
-  padding: 16px;
+  padding: 0;
   margin-top: 20px;
   min-width: 0;
   max-width: 100%;
@@ -685,7 +685,7 @@ p {
   min-height: 80px;
   border: 0;
   display: block;
-  background: #fff;
+  background: transparent;
 }
 .message-status {
   font-size: 0.75rem;

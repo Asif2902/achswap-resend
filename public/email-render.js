@@ -188,9 +188,23 @@
   const EMAIL_ADDRESS =
     /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+$/i;
   const FRAME_CSS = `
-    html, body { margin: 0; padding: 0; background: #fff; color: #222; }
+    html, body { margin: 0; padding: 0; }
     img { max-width: 100%; }
   `;
+  function looksDesigned(html) {
+    const raw = String(html || "");
+    return (
+      /<table\b/i.test(raw) ||
+      /<(?:td|th|tr)\b/i.test(raw) ||
+      /\bbgcolor\s*=/i.test(raw) ||
+      /<style[\s>]/i.test(raw) ||
+      /<img\b/i.test(raw)
+    );
+  }
+  function hasOwnBackground(html) {
+    const raw = String(html || "");
+    return /\bbgcolor\s*=/i.test(raw) || /background(?:-color)?\s*:/i.test(raw);
+  }
 
   function parseStyle(style) {
     const map = {};
@@ -556,6 +570,17 @@
 
   function renderEmail(host, html) {
     const safe = sanitizeEmailHtml(html);
+    const designed = looksDesigned(html) || looksDesigned(safe);
+    host.classList.toggle("is-designed", designed);
+    host.classList.toggle("is-simple", !designed);
+    if (!designed) {
+      const wrap = document.createElement("div");
+      wrap.className = "email-simple";
+      wrap.innerHTML = safe || "";
+      host.replaceChildren(wrap);
+      return wrap;
+    }
+    const ownBackground = hasOwnBackground(html) || hasOwnBackground(safe);
     const iframe = document.createElement("iframe");
     iframe.className = "email-iframe";
     iframe.title = "Email message";
@@ -565,7 +590,10 @@
     );
     iframe.setAttribute("referrerpolicy", "no-referrer");
     iframe.setAttribute("scrolling", "no");
-    iframe.srcdoc = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base target="_blank"><style>${FRAME_CSS}</style></head><body>${
+    const paint = ownBackground
+      ? "html,body{background:transparent}"
+      : "html,body{background:#fff;color:#222}";
+    iframe.srcdoc = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base target="_blank"><style>${FRAME_CSS}${paint}</style></head><body>${
       safe || "<p>This message has no HTML content.</p>"
     }</body></html>`;
     iframe.addEventListener("load", () => {
@@ -762,6 +790,7 @@
     buildQuoteHtml,
     buildForwardHtml,
     parseAddressField,
+    looksDesigned,
     EMAIL_ADDRESS,
   };
 })();

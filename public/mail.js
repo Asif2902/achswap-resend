@@ -539,11 +539,13 @@ function renderThread() {
       el("time", "", time(message.received_at, true)),
     );
     card.append(meta);
+    const designed =
+      message.html_body && window.EmailRender.looksDesigned(message.html_body);
     const bodyEl = el(
       "div",
-      `message-body${message.html_body ? " is-html" : ""}`,
+      designed ? "message-body is-html is-designed" : "message-body",
     );
-    if (message.html_body) renderHtml(bodyEl, message.html_body);
+    if (designed) renderHtml(bodyEl, message.html_body);
     else
       bodyEl.textContent =
         message.text_body || message.display_text || "(No text content)";
@@ -614,15 +616,17 @@ function renderThread() {
   body.append(slot);
   renderReply();
 }
-function quotedBody(message, mode) {
-  const quote =
-    mode === "forward"
-      ? window.EmailRender.buildForwardHtml({
-          ...message,
-          subject: state.thread?.subject || message.subject,
-        })
-      : window.EmailRender.buildQuoteHtml(message);
-  return `<div><br></div>${quote}`;
+function quotedText(message, mode) {
+  if (mode !== "forward") return "";
+  const who = message.from_name
+    ? `${message.from_name} <${message.from_email || ""}>`
+    : message.from_email || "";
+  const body =
+    message.text_body ||
+    window.EmailRender.htmlToPlainText(message.html_body || "") ||
+    message.display_text ||
+    "";
+  return `\n\n---------- Forwarded message ----------\nFrom: ${who}\nDate: ${message.received_at || ""}\nSubject: ${state.thread?.subject || message.subject || ""}\n\n${body}`;
 }
 function startReply(message, mode) {
   if (state.replyDraft && !leaveDraft()) return;
@@ -641,11 +645,8 @@ function startReply(message, mode) {
       state.thread.subject || message.subject,
       mode,
     ),
-    html: quotedBody(message, mode),
-    originalHtml: quotedBody(message, mode),
-    text: "",
+    text: quotedText(message, mode),
     dirty: false,
-    previewing: false,
     requestId: crypto.randomUUID(),
   };
   renderReply();
@@ -713,11 +714,8 @@ function renderReply() {
         state.thread.subject || target.subject,
         mode,
       );
-      draft.html = quotedBody(target, mode);
-      draft.originalHtml = draft.html;
-      draft.text = "";
+      draft.text = quotedText(target, mode);
       draft.dirty = false;
-      draft.previewing = false;
       renderReply();
       $("#reply-body")?.focus();
     });
@@ -791,28 +789,18 @@ function renderReply() {
   });
   showCopyRow(ccToggle, ccRow, draft.cc);
   showCopyRow(bccToggle, bccRow, draft.bcc);
-  const toolbar = el("div", "editor-toolbar");
-  const editor = el("div", "editor-area");
-  editor.id = "reply-body";
-  editor.contentEditable = "true";
-  editor.setAttribute("role", "textbox");
-  editor.setAttribute("aria-multiline", "true");
-  editor.setAttribute("aria-label", "Reply message");
-  editor.dataset.placeholder = "Write a reply…";
-  setEditorHtml(editor, draft.html);
-  editor.addEventListener("input", () => {
-    draft.html = editorHtml(editor);
-    draft.text = editorText(editor);
+  const textarea = el("textarea");
+  textarea.id = "reply-body";
+  textarea.placeholder = "Write a reply…";
+  textarea.setAttribute("aria-label", "Reply message");
+  textarea.required = true;
+  textarea.maxLength = 100000;
+  textarea.value = draft.text;
+  textarea.disabled = !!draft.attempted;
+  textarea.addEventListener("input", () => {
+    draft.text = textarea.value;
     draft.dirty = true;
   });
-  bindEditor(editor);
-  fillToolbar(toolbar, editor);
-  const preview = el("div", "message-body is-html reply-preview");
-  preview.id = "reply-preview";
-  preview.hidden = !draft.previewing;
-  editor.hidden = !!draft.previewing;
-  toolbar.hidden = !!draft.previewing;
-  if (draft.previewing) renderHtml(preview, draft.html);
   const error = el("p", "error");
   error.setAttribute("role", "alert");
   const footer = el("div", "reply-footer");
@@ -823,30 +811,14 @@ function renderReply() {
     state.replyDraft = null;
     renderReply();
   });
-  const previewToggle = el(
-    "button",
-    "text-button",
-    draft.previewing ? "Edit" : "Preview",
-  );
-  previewToggle.type = "button";
-  previewToggle.addEventListener("click", () => {
-    draft.html = editorHtml(editor);
-    draft.text = editorText(editor);
-    draft.to = toInput.value;
-    draft.cc = ccInput.value;
-    draft.bcc = bccInput.value;
-    draft.subject = subjectInput.value;
-    draft.previewing = !draft.previewing;
-    renderReply();
-  });
   const send = el(
     "button",
     "primary",
     draft.attempted ? "Retry same reply ↗" : "Send reply ↗",
   );
   send.type = "submit";
-  footer.append(cancel, previewToggle, send);
-  form.append(head, modes, fields, toolbar, editor, preview, error, footer);
+  footer.append(cancel, send);
+  form.append(head, modes, fields, textarea, error, footer);
   slot.append(form);
   form.addEventListener("keydown", (event) => {
     if (event.key === "Enter" && event.target.tagName === "INPUT")
@@ -855,17 +827,15 @@ function renderReply() {
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     send.disabled = true;
-    editor.contentEditable = "false";
+    textarea.disabled = true;
     draft.attempted = true;
     error.textContent = "";
     try {
       const to = validateAddresses(toInput.value, true);
       const cc = validateAddresses(ccInput.value, false);
       const bcc = validateAddresses(bccInput.value, false);
-      const html = window.EmailRender.sanitizeEmailHtml(editorHtml(editor));
-      const message = editorText(editor);
-      if (!message && !html)
-        throw new Error("Write a message of up to 100 KB.");
+      const message = textarea.value.trim();
+      if (!message) throw new Error("Write a message of up to 100 KB.");
       const result = await api("send", {
         replyTo: draft.replyTo,
         mode: draft.mode,
@@ -874,7 +844,6 @@ function renderReply() {
         bcc,
         subject: subjectInput.value,
         message,
-        html,
         requestId: draft.requestId,
       });
       state.replyDraft = null;
@@ -889,7 +858,7 @@ function renderReply() {
       if (e.status === 400 || !e.status) {
         draft.attempted = false;
         draft.requestId = crypto.randomUUID();
-        editor.contentEditable = "true";
+        textarea.disabled = false;
         send.textContent = "Send reply ↗";
       } else {
         send.textContent = "Retry same reply ↗";
