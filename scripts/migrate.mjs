@@ -67,10 +67,8 @@ if (process.argv[1]?.replaceAll("\\", "/").endsWith("/scripts/migrate.mjs")) {
   try {
     await migrate(db);
     console.log("Mailbox migrations applied; foreign keys verified.");
-  } catch {
-    console.error(
-      "Migration failed. Check configuration and schema; no credential details logged.",
-    );
+  } catch (error) {
+    console.error("Migration failed:", error?.message || error);
     process.exitCode = 1;
   } finally {
     db.close();
