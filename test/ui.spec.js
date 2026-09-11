@@ -37,9 +37,13 @@ test("filters isolate personal mail; support reply uses support and is persisted
     .getByLabel("Reply message")
     .fill("Thanks Jane. We’re checking on this for you.");
   await page.getByRole("button", { name: "Send reply" }).click();
-  await expect(page.locator("#reader .message-body").last()).toContainText(
-    "Thanks Jane. We’re checking on this for you.",
-  );
+  await expect(
+    page
+      .locator("#reader .message-body")
+      .last()
+      .frameLocator("iframe")
+      .locator("body"),
+  ).toContainText("Thanks Jane. We’re checking on this for you.");
   await expect(page.locator(".message-status").last()).toContainText("Sent");
   await page.screenshot({
     path: "test-results/desktop-mailbox.png",
@@ -50,9 +54,13 @@ test("filters isolate personal mail; support reply uses support and is persisted
   await page
     .getByRole("button", { name: "A quick question about my swap — Support" })
     .click();
-  await expect(page.locator("#reader .message-body").last()).toContainText(
-    "Thanks Jane. We’re checking on this for you.",
-  );
+  await expect(
+    page
+      .locator("#reader .message-body")
+      .last()
+      .frameLocator("iframe")
+      .locator("body"),
+  ).toContainText("Thanks Jane. We’re checking on this for you.");
   expect(errors).toEqual([]);
 });
 test("new personal message appears in Sent and cannot impersonate another member", async ({
@@ -92,17 +100,20 @@ test("HTML email renders buttons, images and layout without running scripts", as
   );
   await login(page);
   await page.getByRole("button", { name: "An HTML message — Support" }).click();
-  const body = page.locator(".message-body.is-html").first();
-  await expect(body).toContainText("Hello from HTML.");
-  await expect(body.locator('a[data-email-role="button"]')).toHaveText(
+  const frame = page
+    .locator(".message-body.is-html")
+    .first()
+    .frameLocator("iframe");
+  await expect(frame.locator("body")).toContainText("Hello from HTML.");
+  await expect(frame.locator('a[data-email-role="button"]')).toHaveText(
     "Get started",
   );
-  await expect(body.locator('a[data-email-role="link"]')).toContainText("docs");
-  await expect(body.locator("img")).toHaveAttribute(
+  await expect(frame.locator('a[data-email-role="link"]')).toContainText("docs");
+  await expect(frame.locator("img")).toHaveAttribute(
     "src",
     "https://cdn.example/logo.png",
   );
-  await expect(body.locator("table")).toBeVisible();
+  await expect(frame.locator("table")).toBeVisible();
   expect(errors).toEqual([]);
   expect(dialogs).toEqual([]);
 });
@@ -117,9 +128,9 @@ test("compose CC/BCC and HTML are sent to the API", async ({ page }) => {
   await page.locator("#compose-subject").fill("Styled hello");
   await page.locator("#compose-body").fill("Hello with a button");
   await page.getByRole("button", { name: "Preview" }).click();
-  await expect(page.locator("#compose-preview")).toContainText(
-    "Hello with a button",
-  );
+  await expect(
+    page.locator("#compose-preview").frameLocator("iframe").locator("body"),
+  ).toContainText("Hello with a button");
   const pending = page.waitForRequest("**/api/send");
   await page.getByRole("button", { name: "Send message" }).click();
   const payload = (await pending).postDataJSON();
@@ -271,9 +282,13 @@ test("forward sends to new recipients with the original HTML quoted", async ({
   expect(payload.bcc).toContain("hidden@example.net");
   expect(payload.html).toMatch(/Forwarded message/);
   expect(payload.html).toMatch(/Hello from HTML/);
-  await expect(page.locator("#reader .message-body").last()).toContainText(
-    "Hello from HTML",
-  );
+  await expect(
+    page
+      .locator("#reader .message-body.is-html")
+      .last()
+      .frameLocator("iframe")
+      .locator("body"),
+  ).toContainText("Hello from HTML");
 });
 test("API requires auth and denies direct requests to a different personal inbox", async ({
   page,

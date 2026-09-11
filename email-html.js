@@ -358,30 +358,17 @@ function cssUrlSafe(value) {
 
 function cssValueAllowed(property, value) {
   const trimmed = String(value || "").trim();
-  if (!trimmed || trimmed.length > 600) return false;
+  if (!trimmed || trimmed.length > 800) return false;
   if (/javascript:|expression\s*\(|-moz-binding|behavior\s*:|@import/i.test(trimmed))
     return false;
   if (!cssUrlSafe(trimmed)) return false;
   if (property === "position" && !/^(static|relative)\b/i.test(trimmed))
     return false;
-  if (property === "display")
-    return /^(block|inline|inline-block|flex|inline-flex|grid|inline-grid|table|inline-table|table-row|table-cell|table-caption|table-header-group|table-footer-group|table-row-group|table-column|table-column-group|none|contents|list-item)\b/i.test(
-      trimmed,
-    );
   return true;
 }
 
 function propertyAllowed(property) {
-  if (property === "position") return true;
-  const base = property.replace(/^-(webkit|moz|ms|o)-/, "");
-  return ALLOWED_CSS.has(property) || ALLOWED_CSS.has(base);
-}
-
-function rewriteSelector(selector) {
-  return String(selector || "").replace(
-    /(^|[\s,>+~])(?:html|body)(?=[\s,>+~.#:\[:]|$)/gi,
-    "$1.email-root",
-  );
+  return !/^(behavior|-moz-binding|binding|accelerator)$/i.test(property);
 }
 
 function safeSelector(selector) {
@@ -433,10 +420,9 @@ function sanitizeCssRules(text) {
       continue;
     }
     if (/^@/i.test(selector)) continue;
-    const rewritten = rewriteSelector(selector);
-    if (!safeSelector(rewritten)) continue;
+    if (!safeSelector(selector)) continue;
     const declarations = sanitizeDeclarations(body);
-    if (declarations) kept.push(`${rewritten} { ${declarations} }`);
+    if (declarations) kept.push(`${selector} { ${declarations} }`);
   }
   return kept.join("\n");
 }
@@ -500,8 +486,14 @@ export function safeResourceUrl(value, kind = "img") {
 function safeTokens(value) {
   return String(value || "")
     .split(/\s+/)
-    .filter((token) => /^[A-Za-z_][\w:-]{0,62}$/.test(token))
-    .slice(0, 24)
+    .filter(
+      (token) =>
+        token &&
+        token.length <= 80 &&
+        !/[<>"'`=\\/]/.test(token) &&
+        !/^on/i.test(token),
+    )
+    .slice(0, 40)
     .join(" ");
 }
 
@@ -626,6 +618,8 @@ function sanitizeAttributes(name, attribs, children, parentStyle) {
     output.loading = "lazy";
     output.decoding = "async";
     if (raw.border && /^\d{1,3}$/.test(raw.border)) output.border = raw.border;
+    if (raw.hspace && /^\d{1,4}$/.test(raw.hspace)) output.hspace = raw.hspace;
+    if (raw.vspace && /^\d{1,4}$/.test(raw.vspace)) output.vspace = raw.vspace;
   }
   if (name === "font") {
     const color = safeColor(raw.color);
@@ -645,6 +639,7 @@ function sanitizeAttributes(name, attribs, children, parentStyle) {
       output.rowspan = raw.rowspan;
     if (raw.background && safeResourceUrl(normalizeUrl(raw.background), "img"))
       output.background = normalizeUrl(raw.background);
+    if (raw.nowrap != null && raw.nowrap !== "false") output.nowrap = "nowrap";
   }
   if ((name === "ol" || name === "li") && raw.start && /^\d{1,5}$/.test(raw.start))
     output.start = raw.start;

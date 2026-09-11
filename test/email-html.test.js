@@ -152,13 +152,30 @@ test("preserves body background, media queries and protocol-relative images", ()
   `);
   assert.match(html, /email-canvas/);
   assert.match(html, /bgcolor="#f4f6f8"/);
-  assert.match(html, /\.email-root \{ background: #f4f6f8/);
+  assert.match(html, /body \{ background: #f4f6f8/);
   assert.match(html, /@media only screen and \(max-width: 600px\)/);
   assert.match(html, /width: 100% !important/);
   assert.match(html, /https:\/\/cdn.example\/logo.png/);
   assert.doesNotMatch(html, /data:image\/svg\+xml/);
 });
 
+test("bulletproof table button keeps cell paint and link padding", () => {
+  const html = sanitizeEmailHtml(`
+    <table border="0" cellspacing="0" cellpadding="0">
+      <tr>
+        <td align="center" bgcolor="#2b6cb0" style="border-radius:6px;">
+          <a href="https://achswap.app/go" style="display:inline-block;padding:12px 24px;font-weight:700;color:#ffffff;text-decoration:none">Confirm account</a>
+        </td>
+      </tr>
+    </table>
+  `);
+  assert.match(html, /bgcolor="#2b6cb0"/);
+  assert.match(html, /padding: 12px 24px/);
+  assert.match(html, /color: #ffffff/);
+  assert.match(html, /text-decoration: none/);
+  assert.match(html, /<a /);
+  assert.doesNotMatch(html, /box-sizing/);
+});
 test("table-cell CTA with bgcolor is a button and stays an anchor", () => {
   const html = sanitizeEmailHtml(
     `<table><tr><td bgcolor="#003579" style="border-radius:6px"><a href="https://achswap.app/go" style="display:inline-block;padding:12px 24px;color:#ffffff;text-decoration:none">Confirm</a></td></tr></table>`,

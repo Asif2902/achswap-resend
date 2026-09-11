@@ -680,6 +680,13 @@ p {
   max-width: 100%;
   overflow-x: auto;
 }
+.email-iframe {
+  width: 100%;
+  min-height: 80px;
+  border: 0;
+  display: block;
+  background: #fff;
+}
 .message-status {
   font-size: 0.75rem;
   color: var(--muted);

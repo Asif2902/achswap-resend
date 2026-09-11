@@ -188,78 +188,8 @@
   const EMAIL_ADDRESS =
     /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+$/i;
   const FRAME_CSS = `
-    :host { display: block; max-width: 100%; }
-    .email-root {
-      font-family: Arial, Helvetica, sans-serif;
-      font-size: 16px;
-      line-height: 1.5;
-      color: #1f2328;
-      background: #ffffff;
-      overflow-wrap: anywhere;
-      word-break: break-word;
-      white-space: normal;
-      max-width: 100%;
-    }
-    .email-root *, .email-root *::before, .email-root *::after { box-sizing: border-box; }
-    .email-root table {
-      max-width: 100% !important;
-    }
-    .email-root img {
-      max-width: 100% !important;
-      height: auto;
-      display: inline-block;
-      vertical-align: middle;
-    }
-    .email-root .email-broken {
-      display: inline-flex;
-      align-items: center;
-      min-width: 48px;
-      min-height: 24px;
-      padding: 6px 8px;
-      background: #f6f8fa;
-      color: #656d76;
-      border: 1px dashed #d0d7de;
-      border-radius: 4px;
-      font-size: 12px;
-      line-height: 1.3;
-    }
-    .email-root a[data-email-role="button"] {
-      text-decoration: none !important;
-    }
-    .email-root a[data-email-role="linked-image"] {
-      text-decoration: none;
-      border: 0;
-    }
-    .email-root a[data-email-role="linked-image"] img { border: 0; }
-    .email-root hr {
-      border: 0;
-      border-top: 1px solid #d0d7de;
-      margin: 16px 0;
-    }
-    .email-root pre { white-space: pre-wrap; }
-    .email-root h1, .email-root h2, .email-root h3, .email-root h4 {
-      line-height: 1.25;
-      margin: 0 0 12px;
-    }
-    .email-root blockquote,
-    .email-root .email-quote,
-    .email-root .email-forward,
-    .email-root .gmail_quote {
-      margin: 16px 0 0;
-      padding: 0 0 0 12px;
-      border-left: 2px solid #d0d7de;
-    }
-    .email-root .gmail_signature,
-    .email-root [id*="signature" i],
-    .email-root [class*="signature" i] {
-      margin-top: 16px;
-      color: #656d76;
-    }
-    .email-root .email-missing {
-      color: #656d76;
-      font-style: italic;
-    }
-    .email-root .email-canvas { width: 100%; }
+    html, body { margin: 0; padding: 0; background: #fff; color: #222; }
+    img { max-width: 100%; }
   `;
 
   function parseStyle(style) {
@@ -314,13 +244,12 @@
   }
 
   function propertyAllowed(property) {
-    const base = property.replace(/^-(webkit|moz|ms|o)-/, "");
-    return ALLOWED_CSS.has(property) || ALLOWED_CSS.has(base);
+    return !/^(behavior|-moz-binding|binding|accelerator)$/i.test(property);
   }
 
   function cssValueAllowed(property, value) {
     const trimmed = String(value || "").trim();
-    if (!trimmed || trimmed.length > 600) return false;
+    if (!trimmed || trimmed.length > 800) return false;
     if (
       /javascript:|expression\s*\(|-moz-binding|behavior\s*:|@import/i.test(
         trimmed,
@@ -330,10 +259,6 @@
     if (!cssUrlSafe(trimmed)) return false;
     if (property === "position" && !/^(static|relative)\b/i.test(trimmed))
       return false;
-    if (property === "display")
-      return /^(block|inline|inline-block|flex|inline-flex|grid|inline-grid|table|inline-table|table-row|table-cell|table-caption|table-header-group|table-footer-group|table-row-group|table-column|table-column-group|none|contents|list-item)\b/i.test(
-        trimmed,
-      );
     return true;
   }
 
@@ -344,13 +269,6 @@
         declarations.push(`${property}: ${value}`);
     }
     return declarations.join("; ");
-  }
-
-  function rewriteSelector(selector) {
-    return String(selector || "").replace(
-      /(^|[\s,>+~])(?:html|body)(?=[\s,>+~.#:\[:]|$)/gi,
-      "$1.email-root",
-    );
   }
 
   function safeSelector(selector) {
@@ -395,10 +313,9 @@
         continue;
       }
       if (/^@/i.test(selector)) continue;
-      const rewritten = rewriteSelector(selector);
-      if (!safeSelector(rewritten)) continue;
+      if (!safeSelector(selector)) continue;
       const declarations = sanitizeStyleAttribute(body);
-      if (declarations) kept.push(`${rewritten} { ${declarations} }`);
+      if (declarations) kept.push(`${selector} { ${declarations} }`);
     }
     return kept.join("\n");
   }
@@ -498,6 +415,9 @@
     "referrerpolicy",
     "loading",
     "decoding",
+    "nowrap",
+    "hspace",
+    "vspace",
   ]);
 
   function copySafeAttributes(source, dest) {
@@ -619,36 +539,55 @@
     return wrap.innerHTML;
   }
 
-  function prepareImages(root) {
-    root.querySelectorAll("img").forEach((img) => {
-      const fallback = () => {
-        if (img.classList.contains("email-broken") || img.dataset.broken)
-          return;
-        img.dataset.broken = "1";
-        const alt = img.getAttribute("alt") || "Image unavailable";
-        const span = document.createElement("span");
-        span.className = "email-broken";
-        span.textContent = alt;
-        img.replaceWith(span);
-      };
-      img.addEventListener("error", fallback);
-      if (img.complete && img.naturalWidth === 0 && img.getAttribute("src"))
-        fallback();
-    });
+  function sizeFrame(iframe) {
+    try {
+      const doc = iframe.contentDocument;
+      if (!doc) return;
+      const height = Math.max(
+        doc.body ? doc.body.scrollHeight : 0,
+        doc.documentElement ? doc.documentElement.scrollHeight : 0,
+        40,
+      );
+      iframe.style.height = `${height}px`;
+    } catch {
+      /* sandbox without same-origin */
+    }
   }
 
   function renderEmail(host, html) {
-    const shadow = host.shadowRoot || host.attachShadow({ mode: "open" });
     const safe = sanitizeEmailHtml(html);
-    const wrap = document.createElement("div");
-    wrap.className = "email-root";
-    wrap.innerHTML =
-      safe || `<p class="email-missing">This message has no HTML content.</p>`;
-    prepareImages(wrap);
-    const style = document.createElement("style");
-    style.textContent = FRAME_CSS;
-    shadow.replaceChildren(style, wrap);
-    return shadow;
+    const iframe = document.createElement("iframe");
+    iframe.className = "email-iframe";
+    iframe.title = "Email message";
+    iframe.setAttribute(
+      "sandbox",
+      "allow-popups allow-popups-to-escape-sandbox allow-same-origin",
+    );
+    iframe.setAttribute("referrerpolicy", "no-referrer");
+    iframe.setAttribute("scrolling", "no");
+    iframe.srcdoc = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base target="_blank"><style>${FRAME_CSS}</style></head><body>${
+      safe || "<p>This message has no HTML content.</p>"
+    }</body></html>`;
+    iframe.addEventListener("load", () => {
+      sizeFrame(iframe);
+      try {
+        const doc = iframe.contentDocument;
+        if (!doc) return;
+        doc.querySelectorAll("img").forEach((img) => {
+          img.addEventListener("load", () => sizeFrame(iframe));
+          img.addEventListener("error", () => {
+            if (img.dataset.broken) return;
+            img.dataset.broken = "1";
+            img.style.outline = "1px dashed #d0d7de";
+            sizeFrame(iframe);
+          });
+        });
+      } catch {
+        /* ignore */
+      }
+    });
+    host.replaceChildren(iframe);
+    return iframe;
   }
 
   function escapeHtml(value) {
